@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
-import 'screens/homepage.dart';
+import 'package:focusmaxxer/screens/loginpage.dart';
+import 'package:focusmaxxer/screens/homepage.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const FocusMaxxerApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class FocusMaxxerApp extends StatelessWidget {
+  const FocusMaxxerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'FocusMaxxer',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF0B132B), // Sfondo Deep Blue
+        colorScheme: ColorScheme.dark(
+          primary: Colors.cyanAccent,
+          surface: const Color(0xFF111C3A), // Colore dei bottoni secondari
+        ),
+        fontFamily: 'Roboto', // Sostituibile con Poppins o Montserrat
+      ),
+      home: const LoginPage(),
     );
   }
 }
