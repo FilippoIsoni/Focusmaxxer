@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:focusmaxxer/screens/loginpage.dart';
 import 'package:focusmaxxer/screens/homepage.dart';
 
+import 'screens/OnBoardingPage.dart';
+
 void main() {
   runApp(const FocusMaxxerApp());
 }
@@ -22,7 +24,7 @@ class FocusMaxxerApp extends StatelessWidget {
         ),
         fontFamily: 'Roboto', // Sostituibile con Poppins o Montserrat
       ),
-      home: const LoginPage(),
+      home: const OnboardingPage(),
     );
   }
 }
