@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:focusmaxxer/screens/loginpage.dart';
+import 'loginpage.dart';
 
 class OnboardingPage extends StatefulWidget {
-  //perché in questo modo la pagina ricorda in quale schermata del carosello siamo
   const OnboardingPage({super.key});
 
   @override
@@ -10,166 +9,214 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
-  final PageController _controller =
-      PageController(); //per far andare il carosello alla pagina successiva
-  int _currentPage =
-      0; //variabile che assume valore 0,1,2 per far accendere la barra in basso a sx
+  final PageController _controller = PageController();
+  int _currentPage = 0;
 
-  // Dati delle schermate
-  final List<Map<String, String>> _pages = [
-    //map è una lista di mappe, per non fare 3 pagine diverse. Salviamo solo i dati che cambiamo (titolo, descrizione, icona)
+  final List<Map<String, dynamic>> _pages = [
     {
       'title': 'IL TUO BIO-COACH',
       'desc':
-          'Studia in modo sostenibile (Target 4.7) ed evita il burnout con il monitoraggio.',
-      'icon': 'psychology',
+          'Studia in modo sostenibile. FocusMaxxer impara dai tuoi ritmi biologici per massimizzare l\'apprendimento.',
+      'icon': Icons.psychology_outlined,
     },
     {
       'title': 'ASCOLTA IL CORPO',
       'desc':
-          'Utilizzia i dati del tuo dispositivo wearable per capire in tempo reale quando le tue risorse mentali calano.',
-      'icon': 'favorite',
+          'Analizziamo i dati del tuo wearable per rilevare i cali di concentrazione prima che tu te ne accorga.',
+      'icon': Icons.favorite_border_rounded,
     },
     {
-      'title': 'FOCUS PROFONDO',
+      'title': 'PAUSE INTELLIGENTI',
       'desc':
-          'Affidati ai nostri trigger per pause attive e sessioni di studio ad alta efficienza.',
-      'icon': 'bolt',
+          'Non contare i minuti, ascolta i battiti. Ritrova istantaneamente un focus profondo con pause mirate.',
+      'icon': Icons.bolt_rounded,
     },
   ];
 
+  void _goToLogin() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      //struttura di base
-      body: Stack(
-        //permette di sovrapporre i widget (carosello e bottoni). Carosello come "sfondo", bottoni incollati "sopra"
-        children: [
-          // 1. CAROSELLO (PageView)
-          PageView.builder(
-            controller: _controller,
-            onPageChanged: (index) => setState(
-              () => _currentPage = index,
-            ), //quando faccio swipe oppure premo avanti, aggiorno currentPage e quindi l'indice in basso a sx
-            itemCount: _pages.length,
-            itemBuilder: (context, index) {
-              return _buildPage(
-                title: _pages[index]['title']!,
-                desc: _pages[index]['desc']!,
-                icon: _pages[index]['icon']!,
-              );
-            },
-          ),
+    final colorScheme = Theme.of(context).colorScheme;
 
-          // 2. INDICATORE A PUNTI E BOTTONE (In basso)
-          Positioned(
-            //posiziono i puntini a sinistra e il bottone a destra
-            bottom: 50,
-            left: 24,
-            right: 24,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Puntini (Indicatori)
-                Row(
-                  children: List.generate(
-                    _pages.length,
-                    (index) => Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      height: 8,
-                      width: _currentPage == index ? 24 : 8,
-                      decoration: BoxDecoration(
-                        color: _currentPage == index
-                            ? Colors.cyanAccent
-                            : Colors.grey,
-                        borderRadius: BorderRadius.circular(4),
+    return Scaffold(
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 1. CAROSELLO PRINCIPALE
+            PageView.builder(
+              controller: _controller,
+              onPageChanged: (index) => setState(() => _currentPage = index),
+              itemCount: _pages.length,
+              itemBuilder: (context, index) {
+                return _buildPage(
+                  context: context,
+                  title: _pages[index]['title']!,
+                  desc: _pages[index]['desc']!,
+                  icon: _pages[index]['icon'],
+                  isActive:
+                      _currentPage ==
+                      index, // Passiamo lo stato per le animazioni
+                );
+              },
+            ),
+
+            // 2. BOTTONE "SALTA" (Top Right)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                // Scompare dolcemente se siamo già sull'ultima pagina
+                opacity: _currentPage == _pages.length - 1 ? 0.0 : 1.0,
+                child: TextButton(
+                  onPressed: _goToLogin,
+                  child: Text(
+                    'Salta',
+                    style: TextStyle(
+                      // Sostituisce withOpacity(0.7) con withAlpha(179)
+                      color: colorScheme.onSurface.withAlpha(179),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // 3. INDICATORI E CONTROLLI (Bottom)
+            Positioned(
+              bottom: 40,
+              left: 24,
+              right: 24,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Indicatori a punti animati
+                  Row(
+                    children: List.generate(
+                      _pages.length,
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        margin: const EdgeInsets.only(right: 8),
+                        height: 8,
+                        width: _currentPage == index ? 28 : 8,
+                        decoration: BoxDecoration(
+                          color: _currentPage == index
+                              ? colorScheme.primary
+                              // Sostituisce surfaceVariant e withOpacity(0.3)
+                              : colorScheme.surfaceContainerHighest.withAlpha(
+                                  77,
+                                ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                // Pulsante Avanti / Inizia
-                ElevatedButton(
-                  onPressed: () {
-                    if (_currentPage == _pages.length - 1) {
-                      //se siamo sull'ultima pagina
-                      // Vai al Login
-                      Navigator.pushReplacement(
-                        //vado alla pagina log in e non torno più indietro
-                        // così non possiamo tornare indietro quando siamo nella pagina di log in
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const LoginPage(),
-                        ),
-                      );
-                    } else {
-                      //altrimenti (se non sono nell'ultima pagina)
-                      // Vai alla pagina successiva
-                      _controller.nextPage(
-                        //passo alla prossima pagina
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.cyanAccent,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+
+                  // Bottone di Avanzamento
+                  SizedBox(
+                    width: 160,
+                    height: 56,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        if (_currentPage == _pages.length - 1) {
+                          _goToLogin();
+                        } else {
+                          _controller.nextPage(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeOutCubic,
+                          );
+                        }
+                      },
+                      iconAlignment: IconAlignment.end,
+                      icon: Icon(
+                        _currentPage == _pages.length - 1
+                            ? Icons.check_circle_outline
+                            : Icons.arrow_forward_rounded,
+                        size: 20,
+                      ),
+                      label: Text(
+                        _currentPage == _pages.length - 1 ? 'INIZIA' : 'AVANTI',
+                      ),
                     ),
                   ),
-                  child: Text(
-                    _currentPage == _pages.length - 1 ? 'INIZIA' : 'AVANTI',
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // Widget riutilizzabile per ogni singola pagina del carosello
   Widget _buildPage({
+    required BuildContext context,
     required String title,
     required String desc,
-    required String icon,
+    required IconData icon,
+    required bool isActive,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: const EdgeInsets.all(40.0),
+      padding: const EdgeInsets.symmetric(horizontal: 40.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon == 'psychology'
-                ? Icons.psychology
-                : icon == 'favorite'
-                ? Icons.favorite
-                : Icons.bolt,
-            size: 100,
-            color: Colors.cyanAccent,
+          // Effetto di ingresso fluido e bagliore "Bioluminescente"
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutBack,
+            builder: (context, scale, child) {
+              return Transform.scale(
+                scale: scale,
+                child: Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    // Sostituisce withOpacity(0.05) e usa un gradiente radiale per il Glow
+                    gradient: RadialGradient(
+                      colors: [
+                        colorScheme.primary.withAlpha(
+                          51,
+                        ), // 20% alpha al centro
+                        colorScheme.primary.withAlpha(
+                          0,
+                        ), // Sfuma nel trasparente
+                      ],
+                      radius: 0.8,
+                    ),
+                  ),
+                  child: Icon(icon, size: 90, color: colorScheme.primary),
+                ),
+              );
+            },
           ),
-          const SizedBox(
-            height: 48,
-          ), //creo spazio vuoto per distanziare i vari elementi
+          const SizedBox(height: 48),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2.0,
+              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             desc,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-              height: 1.5,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              // Sostituisce withOpacity(0.7) con withAlpha(179)
+              color: colorScheme.onSurface.withAlpha(179),
+              height: 1.6,
             ),
           ),
         ],
