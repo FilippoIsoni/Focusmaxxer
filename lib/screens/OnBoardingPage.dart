@@ -14,21 +14,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   final List<Map<String, dynamic>> _pages = [
     {
-      'title': 'IL TUO BIO-COACH',
+      'title': 'YOUR BIO-COACH',
       'desc':
-          'Studia in modo sostenibile. FocusMaxxer impara dai tuoi ritmi biologici per massimizzare l\'apprendimento.',
+          'Study sustainably. FocusMaxxer learns from your biological rhythms to maximize learning and prevent burnout.',
       'icon': Icons.psychology_outlined,
     },
     {
-      'title': 'ASCOLTA IL CORPO',
+      'title': 'LISTEN TO YOUR BODY',
       'desc':
-          'Analizziamo i dati del tuo wearable per rilevare i cali di concentrazione prima che tu te ne accorga.',
+          'We analyze your wearable data to detect concentration drops before you even notice.',
       'icon': Icons.favorite_border_rounded,
     },
     {
-      'title': 'PAUSE INTELLIGENTI',
+      'title': 'SMART BREAKS',
       'desc':
-          'Non contare i minuti, ascolta i battiti. Ritrova istantaneamente un focus profondo con pause mirate.',
+          'Don\'t count the minutes, listen to your heartbeat. Regain deep focus instantly with guided breaks.',
       'icon': Icons.bolt_rounded,
     },
   ];
