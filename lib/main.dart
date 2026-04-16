@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
-import 'screens/onboardingpage.dart';
+import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'providers/auth_provider.dart';
+import 'providers/bio_provider.dart';
+import 'providers/focus_provider.dart';
+
+import 'screens/onboarding_page.dart';
+import 'screens/login_page.dart';
+import 'screens/home_dashboard.dart';
+
 void main() {
-  runApp(const FocusMaxxerApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => BioProvider()),
+        ChangeNotifierProvider(create: (_) => FocusProvider()),
+      ],
+      child: const FocusMaxxerApp(),
+    ),
+  );
 }
 
 class FocusMaxxerApp extends StatelessWidget {
@@ -13,11 +30,10 @@ class FocusMaxxerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'FocusMaxxer',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-
-        // Applica il font e sovrascrive il bianco puro con il nostro grigio chiaro riposante
         textTheme:
             GoogleFonts.plusJakartaSansTextTheme(
               ThemeData.dark().textTheme,
@@ -25,24 +41,18 @@ class FocusMaxxerApp extends StatelessWidget {
               bodyColor: const Color(0xFFE2E8F0),
               displayColor: const Color(0xFFF8FAFC),
             ),
-
-        scaffoldBackgroundColor: const Color(0xFF0F141E), // Deep Slate
-
+        scaffoldBackgroundColor: const Color(0xFF0F141E),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF2DD4BF), // Teal - Focus Mode Ottimale
-          onPrimary: Color(0xFF0F141E), // Testo scuro sui bottoni primari
-          secondary: Color(0xFFFBBF24), // Amber - Avviso affaticamento
+          primary: Color(0xFF2DD4BF),
+          onPrimary: Color(0xFF0F141E),
+          secondary: Color(0xFFFBBF24),
           onSecondary: Color(0xFF0F141E),
-          tertiary: Color(
-            0xFF38BDF8,
-          ), // Light Blue - Elementi neutri/informativi
-          surface: Color(0xFF1E2433), // Onice - Sfondo di Card e Input
+          tertiary: Color(0xFF38BDF8),
+          surface: Color(0xFF1E2433),
           onSurface: Color(0xFFE2E8F0),
-          error: Color(0xFFF43F5E), // Rose - Pausa necessaria
+          error: Color(0xFFF43F5E),
           onError: Colors.white,
         ),
-
-        // Stile globale dei Bottoni
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             elevation: 0,
@@ -57,11 +67,9 @@ class FocusMaxxerApp extends StatelessWidget {
             ),
           ),
         ),
-
-        // Stile globale dei Campi di Testo (Invisible UI)
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFF1E2433), // Allineato al colore Surface
+          fillColor: const Color(0xFF1E2433),
           contentPadding: const EdgeInsets.all(20),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16.0),
@@ -74,22 +82,23 @@ class FocusMaxxerApp extends StatelessWidget {
           labelStyle: const TextStyle(color: Color(0xFF64748B)),
           prefixIconColor: const Color(0xFF64748B),
         ),
-
-        // Stile globale per i messaggi di feedback (es. Login riuscito/fallito)
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFF1E2433),
-          contentTextStyle: const TextStyle(
-            color: Color(0xFFE2E8F0),
-            fontFamily: 'Plus Jakarta Sans',
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          behavior: SnackBarBehavior
-              .floating, // Rende la snackbar moderna, staccata dai bordi
-        ),
       ),
-      home: const OnboardingPage(),
+      home: Consumer<AuthProvider>(
+        builder: (context, auth, child) {
+          switch (auth.status) {
+            case AuthStatus.unknown:
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            case AuthStatus.firstTime:
+              return const OnboardingPage();
+            case AuthStatus.unauthenticated:
+              return const LoginPage();
+            case AuthStatus.authenticated:
+              return const HomeDashboard();
+          }
+        },
+      ),
     );
   }
 }

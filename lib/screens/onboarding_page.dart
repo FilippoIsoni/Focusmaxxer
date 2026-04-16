@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'loginpage.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -33,11 +34,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     },
   ];
 
-  void _goToLogin() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-    );
+  void _finishOnboarding() {
+    context.read<AuthProvider>().completeOnboarding();
   }
 
   @override
@@ -48,7 +46,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
       body: SafeArea(
         child: Stack(
           children: [
-            // 1. CAROSELLO PRINCIPALE
             PageView.builder(
               controller: _controller,
               onPageChanged: (index) => setState(() => _currentPage = index),
@@ -59,27 +56,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   title: _pages[index]['title']!,
                   desc: _pages[index]['desc']!,
                   icon: _pages[index]['icon'],
-                  isActive:
-                      _currentPage ==
-                      index, // Passiamo lo stato per le animazioni
+                  isActive: _currentPage == index,
                 );
               },
             ),
-
-            // 2. BOTTONE "SALTA" (Top Right)
             Positioned(
               top: 16,
               right: 16,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 300),
-                // Scompare dolcemente se siamo già sull'ultima pagina
                 opacity: _currentPage == _pages.length - 1 ? 0.0 : 1.0,
                 child: TextButton(
-                  onPressed: _goToLogin,
+                  onPressed: _finishOnboarding,
                   child: Text(
-                    'Salta',
+                    'Skip',
                     style: TextStyle(
-                      // Sostituisce withOpacity(0.7) con withAlpha(179)
                       color: colorScheme.onSurface.withAlpha(179),
                       fontWeight: FontWeight.w600,
                     ),
@@ -87,8 +78,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 ),
               ),
             ),
-
-            // 3. INDICATORI E CONTROLLI (Bottom)
             Positioned(
               bottom: 40,
               left: 24,
@@ -96,7 +85,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Indicatori a punti animati
                   Row(
                     children: List.generate(
                       _pages.length,
@@ -109,7 +97,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         decoration: BoxDecoration(
                           color: _currentPage == index
                               ? colorScheme.primary
-                              // Sostituisce surfaceVariant e withOpacity(0.3)
                               : colorScheme.surfaceContainerHighest.withAlpha(
                                   77,
                                 ),
@@ -118,15 +105,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                     ),
                   ),
-
-                  // Bottone di Avanzamento
                   SizedBox(
                     width: 160,
                     height: 56,
                     child: FilledButton.icon(
                       onPressed: () {
                         if (_currentPage == _pages.length - 1) {
-                          _goToLogin();
+                          _finishOnboarding();
                         } else {
                           _controller.nextPage(
                             duration: const Duration(milliseconds: 500),
@@ -142,7 +127,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         size: 20,
                       ),
                       label: Text(
-                        _currentPage == _pages.length - 1 ? 'INIZIA' : 'AVANTI',
+                        _currentPage == _pages.length - 1 ? 'START' : 'NEXT',
                       ),
                     ),
                   ),
@@ -169,7 +154,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Effetto di ingresso fluido e bagliore "Bioluminescente"
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0.8, end: isActive ? 1.0 : 0.8),
             duration: const Duration(milliseconds: 600),
@@ -181,15 +165,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    // Sostituisce withOpacity(0.05) e usa un gradiente radiale per il Glow
                     gradient: RadialGradient(
                       colors: [
-                        colorScheme.primary.withAlpha(
-                          51,
-                        ), // 20% alpha al centro
-                        colorScheme.primary.withAlpha(
-                          0,
-                        ), // Sfuma nel trasparente
+                        colorScheme.primary.withAlpha(51),
+                        colorScheme.primary.withAlpha(0),
                       ],
                       radius: 0.8,
                     ),
@@ -214,7 +193,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
             desc,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              // Sostituisce withOpacity(0.7) con withAlpha(179)
               color: colorScheme.onSurface.withAlpha(179),
               height: 1.6,
             ),

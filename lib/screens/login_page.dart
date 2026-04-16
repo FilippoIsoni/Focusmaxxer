@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'homepage.dart'; // Assicurati che questo file esista
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,34 +11,21 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
-  bool _isLoading = false; // Gestisce lo stato di caricamento
+  bool _isLoading = false;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   Future<void> _handleLogin() async {
-    // 1. Chiude la tastiera
     FocusScope.of(context).unfocus();
-
-    // 2. Avvia l'animazione di caricamento sul bottone
     setState(() => _isLoading = true);
 
-    // Simuliamo il tempo di rete / calcolo (1.5 secondi)
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    // Se il widget è stato chiuso prima della fine dell'attesa, interrompiamo
-    if (!mounted) return;
-
-    // 3. Logica di validazione
-    if (_emailController.text == 'admin' && _passwordController.text == '123') {
-      // In caso di successo, naviga alla Home (il feedback positivo è intrinseco)
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const MyHomePage(),
-        ),
+    try {
+      await context.read<AuthProvider>().login(
+        _emailController.text,
+        _passwordController.text,
       );
-    } else {
-      // In caso di errore, fermiamo il caricamento e mostriamo l'errore
+    } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -48,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Credenziali errate. Riprova.',
+                  'Invalid credentials. Please try again.',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: Colors.white),
@@ -57,7 +45,6 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
           backgroundColor: Theme.of(context).colorScheme.error,
-          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -68,7 +55,6 @@ class _LoginPageState extends State<LoginPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      // GestureDetector rileva i tap sullo sfondo vuoto per chiudere la tastiera
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.opaque,
@@ -76,7 +62,6 @@ class _LoginPageState extends State<LoginPage> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              // Animazione di ingresso in dissolvenza (Fade-in)
               child: TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 800),
@@ -85,7 +70,7 @@ class _LoginPageState extends State<LoginPage> {
                   return Opacity(
                     opacity: opacity,
                     child: Transform.translate(
-                      offset: Offset(0, 20 * (1 - opacity)), // Sale leggermente
+                      offset: Offset(0, 20 * (1 - opacity)),
                       child: child,
                     ),
                   );
@@ -94,14 +79,13 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 1. HEADER (Con effetto Glow Bioluminescente)
                     Container(
                       padding: const EdgeInsets.all(32),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: RadialGradient(
                           colors: [
-                            colorScheme.primary.withAlpha(51), // 20% alpha
+                            colorScheme.primary.withAlpha(51),
                             colorScheme.primary.withAlpha(0),
                           ],
                           radius: 0.8,
@@ -126,26 +110,23 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 60),
 
-                    // 2. CAMPO EMAIL
                     TextFormField(
                       controller: _emailController,
-                      textInputAction: TextInputAction.next, // Tasto 'Avanti'
+                      textInputAction: TextInputAction.next,
                       keyboardType: TextInputType.emailAddress,
-                      enabled: !_isLoading, // Disabilita durante il caricamento
+                      enabled: !_isLoading,
                       decoration: const InputDecoration(
-                        labelText: 'Email o Username',
+                        labelText: 'Email or Username',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
                     const SizedBox(height: 24),
 
-                    // 3. CAMPO PASSWORD
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done, // Tasto 'Fine'
-                      onFieldSubmitted: (_) =>
-                          _handleLogin(), // Invio esegue il login
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _handleLogin(),
                       enabled: !_isLoading,
                       decoration: InputDecoration(
                         labelText: 'Password',
@@ -166,13 +147,12 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 4. PASSWORD DIMENTICATA
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: _isLoading ? null : () {},
                         child: Text(
-                          'Password dimenticata?',
+                          'Forgot Password?',
                           style: TextStyle(
                             color: colorScheme.onSurface.withAlpha(179),
                           ),
@@ -181,11 +161,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 32),
 
-                    // 5. BOTTONE DI LOGIN (Reattivo e con Spinner)
                     SizedBox(
                       height: 56,
                       child: FilledButton(
-                        // Se sta caricando, null disabilita il bottone nativamente
                         onPressed: _isLoading ? null : _handleLogin,
                         child: _isLoading
                             ? SizedBox(
@@ -196,17 +174,16 @@ class _LoginPageState extends State<LoginPage> {
                                   color: colorScheme.onPrimary,
                                 ),
                               )
-                            : const Text('ACCEDI'),
+                            : const Text('LOGIN'),
                       ),
                     ),
                     const SizedBox(height: 40),
 
-                    // 6. REGISTRAZIONE
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Nuovo utente? ',
+                          'New user? ',
                           style: TextStyle(
                             color: colorScheme.onSurface.withAlpha(179),
                           ),
@@ -214,7 +191,7 @@ class _LoginPageState extends State<LoginPage> {
                         GestureDetector(
                           onTap: _isLoading ? null : () {},
                           child: Text(
-                            'Registrati ora',
+                            'Register now',
                             style: TextStyle(
                               color: colorScheme.primary,
                               fontWeight: FontWeight.bold,
