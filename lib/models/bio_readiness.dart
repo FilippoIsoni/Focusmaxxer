@@ -1,8 +1,14 @@
+import 'dart:math';
+
 class BioReadiness {
-  final double efficiency; // I_e (0-100)
+  final double efficiency;
   final int remMinutes;
   final int deepMinutes;
   final int totalSleepMinutes;
+
+  static const int targetREM = 96;
+  static const int targetDeep = 72;
+  static const int targetTotal = 420;
 
   BioReadiness({
     required this.efficiency,
@@ -11,42 +17,35 @@ class BioReadiness {
     required this.totalSleepMinutes,
   });
 
-  // Calcolo Indice Cognitivo (Ic)
-  double get _cognitiveIndex {
-    if (totalSleepMinutes == 0) return 0.0;
-    double ic = (remMinutes / (totalSleepMinutes * 0.20)) * 100;
-    return ic > 100.0 ? 100.0 : ic; // Cap a 100
-  }
+  double get _cognitiveIndex => min(100.0, (remMinutes / targetREM) * 100);
+  double get _physicalIndex => min(100.0, (deepMinutes / targetDeep) * 100);
 
-  // Calcolo Indice Fisico (If)
-  double get _physicalIndex {
-    if (totalSleepMinutes == 0) return 0.0;
-    double p_if = (deepMinutes / (totalSleepMinutes * 0.15)) * 100;
-    return p_if > 100.0 ? 100.0 : p_if; // Cap a 100
-  }
-
-  // Readiness Score Finale (RS)
   int get readinessScore {
-    double rs =
+    if (totalSleepMinutes == 0) return 0;
+
+    // Modello SAFTE Puro
+    double baseScore =
         (efficiency * 0.40) +
         (_cognitiveIndex * 0.40) +
         (_physicalIndex * 0.20);
-    return rs.round();
+
+    if (totalSleepMinutes < targetTotal) {
+      double penaltyMultiplier = totalSleepMinutes / targetTotal;
+      baseScore *= penaltyMultiplier;
+    }
+
+    return baseScore.round().clamp(0, 100);
   }
 
-  // Generazione dinamica del messaggio basata sulle soglie
   String get dynamicMessage {
     final rs = readinessScore;
-    if (rs >= 85) {
-      return 'Pieno recupero cognitivo. Ideale per studiare argomenti nuovi o complessi.';
-    } else if (rs >= 60) {
+    if (rs >= 85)
+      return 'Pieno recupero cognitivo. Ideale per studiare argomenti complessi.';
+    if (rs >= 60)
       return 'Recupero parziale. L\'app anticiperà leggermente le tue pause.';
-    } else {
-      return 'Debito di sonno rilevato. Dedicati al ripasso ed evita sovraccarichi.';
-    }
+    return 'Debito di sonno rilevato. Dedicati al ripasso ed evita sovraccarichi.';
   }
 
-  // Determina lo stato per il Color Morphing della UI
   String get uiState {
     final rs = readinessScore;
     if (rs >= 85) return 'optimal';
@@ -54,22 +53,31 @@ class BioReadiness {
     return 'critical';
   }
 
-  // Dati Mock per simulazione e test UI
-  factory BioReadiness.mockOttimale() {
+  factory BioReadiness.fromJson(Map<String, dynamic> json) {
+    final levels = json['levels'] as Map<String, dynamic>? ?? {};
+    final summary = levels['summary'] as Map<String, dynamic>? ?? {};
+    final deepData = summary['deep'] as Map<String, dynamic>? ?? {};
+    final remData = summary['rem'] as Map<String, dynamic>? ?? {};
+    final num efficiencyNum = json['efficiency'] as num? ?? 0;
+
     return BioReadiness(
-      efficiency: 92.0,
-      remMinutes: 105, // Ottimo REM
-      deepMinutes: 80, // Ottimo Deep
-      totalSleepMinutes: 480, // 8 ore
+      efficiency: efficiencyNum.toDouble(),
+      remMinutes: remData['minutes'] as int? ?? 0,
+      deepMinutes: deepData['minutes'] as int? ?? 0,
+      totalSleepMinutes: json['minutesAsleep'] as int? ?? 0,
     );
   }
 
-  factory BioReadiness.mockStanco() {
-    return BioReadiness(
-      efficiency: 70.0,
-      remMinutes: 45, // Carenza REM
-      deepMinutes: 40, // Carenza Deep
-      totalSleepMinutes: 300, // 5 ore
-    );
-  }
+  factory BioReadiness.mockOttimale() => BioReadiness(
+    efficiency: 96.0,
+    remMinutes: 105,
+    deepMinutes: 80,
+    totalSleepMinutes: 480,
+  );
+  factory BioReadiness.mockStanco() => BioReadiness(
+    efficiency: 70.0,
+    remMinutes: 45,
+    deepMinutes: 40,
+    totalSleepMinutes: 300,
+  );
 }
