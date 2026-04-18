@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/bio_provider.dart';
 import 'profile_page.dart';
+import 'focus_mode_page.dart';
 
 // --- MAIN DASHBOARD SHELL ---
 class HomeDashboard extends StatefulWidget {
@@ -438,7 +439,11 @@ class HomeTab extends StatelessWidget {
                   ),
                   onPressed: () {
                     HapticFeedback.heavyImpact();
-                    // Navigator.push verso FocusModePage
+
+                    // Esegue il push della nuova pagina sopra la dashboard
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const FocusModePage()),
+                    );
                   },
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
