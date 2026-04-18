@@ -6,6 +6,27 @@ import '../providers/bio_provider.dart';
 import 'profile_page.dart';
 import 'focus_mode_page.dart';
 
+// --- INTERPRETE SEMANTICO (Layer di Presentazione) ---
+// Isola la UI dalla logica di dominio e dai numeri magici.
+class BioSemanticInterpreter {
+  static Color getReadinessColor(String state, ColorScheme cs) =>
+      switch (state) {
+        'optimal' => cs.primary,
+        'warning' => cs.secondary,
+        _ => cs.error,
+      };
+
+  static String getSleepStatus(int minutes) =>
+      minutes >= 420 ? 'Ottimale' : 'Carente';
+  static Color getSleepColor(int minutes, ColorScheme cs) =>
+      minutes >= 420 ? cs.primary : cs.error;
+
+  static String getRHRStatus(double rhr) =>
+      rhr <= 62.0 ? 'Rilassato' : 'Sotto Sforzo';
+  static Color getRHRColor(double rhr, ColorScheme cs) =>
+      rhr <= 62.0 ? cs.primary : cs.secondary;
+}
+
 // --- MAIN DASHBOARD SHELL ---
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -23,6 +44,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
   ];
 
   void _updateTab(int index) {
+    if (_currentIndex == index) return;
     HapticFeedback.selectionClick();
     setState(() => _currentIndex = index);
   }
@@ -33,40 +55,38 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      extendBodyBehindAppBar: true,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
-        switchInCurve: Curves.easeOutQuart,
-        switchOutCurve: Curves.easeInQuart,
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return FadeTransition(
-            opacity: animation,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.95, end: 1.0).animate(animation),
-              child: child,
+      body: Stack(
+        alignment: Alignment.topCenter,
+        children: List.generate(_pages.length, (index) {
+          final bool isActive = _currentIndex == index;
+
+          return TickerMode(
+            enabled: isActive,
+            child: ExcludeSemantics(
+              excluding: !isActive,
+              child: IgnorePointer(
+                ignoring: !isActive,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutQuart,
+                  opacity: isActive ? 1.0 : 0.0,
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeOutQuart,
+                    scale: isActive ? 1.0 : 0.95,
+                    child: _pages[index],
+                  ),
+                ),
+              ),
             ),
           );
-        },
-        layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
-          return Stack(
-            alignment: Alignment.topCenter,
-            children: <Widget>[
-              ...previousChildren,
-              currentChild ?? const SizedBox.shrink(),
-            ],
-          );
-        },
-        child: _pages[_currentIndex],
+        }),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         backgroundColor: theme.colorScheme.surface,
         indicatorColor: theme.colorScheme.primary.withAlpha(38),
-        onDestinationSelected: (index) {
-          if (_currentIndex != index) {
-            _updateTab(index);
-          }
-        },
+        onDestinationSelected: _updateTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -88,28 +108,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
-  Color _getReadinessColor(String state, ColorScheme colorScheme) {
-    if (state == 'optimal') return colorScheme.primary;
-    if (state == 'warning') return colorScheme.secondary;
-    return colorScheme.error;
-  }
-
-  // Decodifica semantica per i fattori chiave
-  String _getSleepStatus(int minutes) =>
-      minutes >= 420 ? 'Ottimale' : 'Carente';
-  Color _getSleepColor(int minutes, ColorScheme cs) =>
-      minutes >= 420 ? cs.primary : cs.error;
-
-  String _getRHRStatus(double rhr) =>
-      rhr <= 62.0 ? 'Rilassato' : 'Sotto Sforzo';
-  Color _getRHRColor(double rhr, ColorScheme cs) =>
-      rhr <= 62.0 ? cs.primary : cs.secondary;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
+    final colorScheme = theme.colorScheme;
 
     return Stack(
       children: [
@@ -119,53 +122,16 @@ class HomeTab extends StatelessWidget {
             parent: AlwaysScrollableScrollPhysics(),
           ),
           slivers: [
-            SliverAppBar(
-              pinned: true,
-              stretch: true,
-              expandedHeight: 140.0,
-              backgroundColor: Colors.transparent,
-              flexibleSpace: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-                  child: FlexibleSpaceBar(
-                    stretchModes: const [
-                      StretchMode.zoomBackground,
-                      StretchMode.fadeTitle,
-                    ],
-                    titlePadding: const EdgeInsets.only(
-                      left: 24.0,
-                      bottom: 16.0,
-                    ),
-                    centerTitle: false,
-                    title: const Text(
-                      'FocusMaxxer',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    background: Container(
-                      color: colorScheme.surface.withAlpha(180),
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.account_circle_outlined),
-                  tooltip: 'Profilo utente',
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    // IL COLLEGAMENTO ALLA PAGINA PROFILO
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfilePage()),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-              ],
+            _PremiumSliverAppBar(
+              title: 'FocusMaxxer',
+              actionIcon: Icons.account_circle_outlined,
+              onActionTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProfilePage()));
+              },
             ),
-
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(24.0, 16.0, 24.0, 130.0),
               sliver: SliverList(
@@ -185,300 +151,234 @@ class HomeTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
 
-                  Consumer<BioProvider>(
-                    builder: (context, bio, child) {
-                      final readiness = bio.readiness;
-                      final dynamicColor = _getReadinessColor(
-                        readiness.uiState,
-                        colorScheme,
-                      );
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // READINESS CARD PRINCIPALE
-                          MergeSemantics(
-                            child: Container(
-                              padding: const EdgeInsets.fromLTRB(
-                                24,
-                                32,
-                                24,
-                                32,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface,
-                                borderRadius: BorderRadius.circular(32),
-                                border: Border.all(
-                                  color: colorScheme.outlineVariant.withAlpha(
-                                    25,
-                                  ),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withAlpha(51),
-                                    blurRadius: 40,
-                                    offset: const Offset(0, 15),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.health_and_safety_outlined,
-                                        color: dynamicColor,
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'STATO COGNITIVO',
-                                        style: textTheme.labelMedium?.copyWith(
-                                          letterSpacing: 2.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: dynamicColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 32),
-
-                                  SizedBox(
-                                    height: 180,
-                                    width: 180,
-                                    child: TweenAnimationBuilder<double>(
-                                      tween: Tween<double>(
-                                        begin: 0.0,
-                                        end: readiness.readinessScore / 100.0,
-                                      ),
-                                      duration: const Duration(
-                                        milliseconds: 1800,
-                                      ),
-                                      curve: Curves.easeOutExpo,
-                                      builder: (context, value, child) {
-                                        return Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            CircularProgressIndicator(
-                                              value: 1.0,
-                                              strokeWidth: 8,
-                                              color: Colors.white.withAlpha(13),
-                                            ),
-                                            CircularProgressIndicator(
-                                              value: value,
-                                              strokeWidth: 8,
-                                              backgroundColor:
-                                                  Colors.transparent,
-                                              color: dynamicColor,
-                                              strokeCap: StrokeCap.round,
-                                            ),
-                                            Center(
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    '${(value * 100).toInt()}',
-                                                    style: textTheme
-                                                        .displayLarge
-                                                        ?.copyWith(
-                                                          fontSize: 72,
-                                                          fontWeight:
-                                                              FontWeight.w200,
-                                                          color: Colors.white,
-                                                          height: 1.0,
-                                                          fontFeatures: const [
-                                                            FontFeature.tabularFigures(),
-                                                          ],
-                                                        ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    '/100',
-                                                    style: textTheme.labelSmall
-                                                        ?.copyWith(
-                                                          color: colorScheme
-                                                              .onSurfaceVariant,
-                                                          letterSpacing: 2.0,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 32),
-                                  Text(
-                                    readiness.dynamicMessage,
-                                    textAlign: TextAlign.center,
-                                    style: textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // SEZIONE: FATTORI CHIAVE (Trasparenza dei dati)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8.0,
-                            ),
-                            child: Text(
-                              'FATTORI CHIAVE',
-                              style: textTheme.labelSmall?.copyWith(
-                                letterSpacing: 1.5,
-                                color: colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Lista dei fattori biologici che compongono il punteggio
-                          _ContributorTile(
-                            icon: Icons.bedtime_rounded,
-                            title: 'Recupero Notturno',
-                            description:
-                                '${readiness.totalSleepMinutes ~/ 60}h ${readiness.totalSleepMinutes % 60}m registrati.',
-                            statusLabel: _getSleepStatus(
-                              readiness.totalSleepMinutes,
-                            ),
-                            statusColor: _getSleepColor(
-                              readiness.totalSleepMinutes,
-                              colorScheme,
-                            ),
-                            colorScheme: colorScheme,
-                            textTheme: textTheme,
-                          ),
-                          const SizedBox(height: 8),
-                          _ContributorTile(
-                            icon: Icons.favorite_rounded,
-                            title: 'Tensione Nervosa',
-                            description:
-                                'Frequenza a riposo: ${bio.morningRHR.toInt()} bpm.',
-                            statusLabel: _getRHRStatus(bio.morningRHR),
-                            statusColor: _getRHRColor(
-                              bio.morningRHR,
-                              colorScheme,
-                            ),
-                            colorScheme: colorScheme,
-                            textTheme: textTheme,
-                          ),
-                          const SizedBox(height: 8),
-                          _ContributorTile(
-                            icon: Icons.psychology_rounded,
-                            title: 'Capacità Cognitiva',
-                            description:
-                                'Basato sulla tua variabilità cardiaca (HRV).',
-                            statusLabel: readiness.readinessScore >= 80
-                                ? 'Ottimale'
-                                : 'Bilanciata',
-                            statusColor: dynamicColor,
-                            colorScheme: colorScheme,
-                            textTheme: textTheme,
-                          ),
-                        ],
-                      );
-                    },
-                  ),
+                  const _ReadinessCard(),
+                  const SizedBox(height: 32),
+                  const _KeyFactorsSection(),
                 ]),
               ),
             ),
           ],
         ),
+        const _FloatingStartButton(),
+      ],
+    );
+  }
+}
 
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.surface.withAlpha(0),
-                  colorScheme.surface.withAlpha(180),
-                  colorScheme.surface,
-                ],
-                stops: const [0.0, 0.4, 1.0],
-              ),
+// --- WIDGET ESTRATTI E PURIFICATI ---
+
+class _ReadinessCard extends StatelessWidget {
+  const _ReadinessCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    final readiness = context.select((BioProvider bio) => bio.readiness);
+    // Delegazione del colore all'Interprete
+    final dynamicColor = BioSemanticInterpreter.getReadinessColor(
+      readiness.uiState,
+      colorScheme,
+    );
+
+    return MergeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: colorScheme.outlineVariant.withAlpha(25),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colorScheme.shadow.withAlpha(51),
+              blurRadius: 40,
+              offset: const Offset(0, 15),
             ),
-            padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-            child: SafeArea(
-              top: false,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colorScheme.primary.withAlpha(51),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.health_and_safety_outlined,
+                  color: dynamicColor,
+                  size: 22,
                 ),
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                const SizedBox(width: 8),
+                Text(
+                  'STATO COGNITIVO',
+                  style: textTheme.labelMedium?.copyWith(
+                    letterSpacing: 2.5,
+                    fontWeight: FontWeight.bold,
+                    color: dynamicColor,
                   ),
-                  onPressed: () {
-                    HapticFeedback.heavyImpact();
-
-                    // Esegue il push della nuova pagina sopra la dashboard
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const FocusModePage()),
-                    );
-                  },
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              height: 180,
+              width: 180,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(
+                  begin: 0.0,
+                  end: readiness.readinessScore / 100.0,
+                ),
+                duration: const Duration(milliseconds: 1800),
+                curve: Curves.easeOutExpo,
+                builder: (context, value, child) {
+                  return Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Icon(Icons.power_settings_new_rounded),
-                      SizedBox(width: 12),
-                      Text(
-                        'AVVIA SESSIONE',
-                        style: TextStyle(
-                          letterSpacing: 2.0,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                      CircularProgressIndicator(
+                        value: 1.0,
+                        strokeWidth: 8,
+                        color: colorScheme.onSurface.withAlpha(13),
+                      ),
+                      CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 8,
+                        backgroundColor: Colors.transparent,
+                        color: dynamicColor,
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${(value * 100).toInt()}',
+                                style: textTheme.displayLarge?.copyWith(
+                                  fontSize: 72,
+                                  fontWeight: FontWeight.w200,
+                                  color: Colors.white,
+                                  height: 1.0,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '/100',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  letterSpacing: 2.0,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
             ),
+            const SizedBox(height: 32),
+            Text(
+              readiness.dynamicMessage,
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyFactorsSection extends StatelessWidget {
+  const _KeyFactorsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    final (readiness, morningRHR) = context.select(
+      (BioProvider b) => (b.readiness, b.morningRHR),
+    );
+
+    // Sincronizzazione visiva assoluta: usa la stessa funzione della Card
+    final dynamicColor = BioSemanticInterpreter.getReadinessColor(
+      readiness.uiState,
+      colorScheme,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Text(
+            'FATTORI CHIAVE',
+            style: textTheme.labelSmall?.copyWith(
+              letterSpacing: 1.5,
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.bold,
+            ),
           ),
+        ),
+        const SizedBox(height: 12),
+        _ContributorTile(
+          icon: Icons.bedtime_rounded,
+          title: 'Recupero Notturno',
+          description:
+              '${readiness.totalSleepMinutes ~/ 60}h ${readiness.totalSleepMinutes % 60}m registrati.',
+          statusLabel: BioSemanticInterpreter.getSleepStatus(
+            readiness.totalSleepMinutes,
+          ),
+          statusColor: BioSemanticInterpreter.getSleepColor(
+            readiness.totalSleepMinutes,
+            colorScheme,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _ContributorTile(
+          icon: Icons.favorite_rounded,
+          title: 'Tensione Nervosa',
+          description: 'Frequenza a riposo: ${morningRHR.toInt()} bpm.',
+          statusLabel: BioSemanticInterpreter.getRHRStatus(morningRHR),
+          statusColor: BioSemanticInterpreter.getRHRColor(
+            morningRHR,
+            colorScheme,
+          ),
+        ),
+        const SizedBox(height: 8),
+        _ContributorTile(
+          icon: Icons.psychology_rounded,
+          title: 'Capacità Cognitiva',
+          description: 'Basato sulla tua variabilità cardiaca (HRV).',
+          statusLabel: readiness.uiState == 'optimal'
+              ? 'Ottimale'
+              : 'Bilanciata',
+          statusColor: dynamicColor,
         ),
       ],
     );
   }
 }
 
-// Widget specializzato per mostrare i fattori chiave in modo pulito e descrittivo
 class _ContributorTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String description;
   final String statusLabel;
   final Color statusColor;
-  final ColorScheme colorScheme;
-  final TextTheme textTheme;
 
   const _ContributorTile({
     required this.icon,
@@ -486,12 +386,14 @@ class _ContributorTile extends StatelessWidget {
     required this.description,
     required this.statusLabel,
     required this.statusColor,
-    required this.colorScheme,
-    required this.textTheme,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -555,6 +457,135 @@ class _ContributorTile extends StatelessWidget {
   }
 }
 
+class _FloatingStartButton extends StatelessWidget {
+  const _FloatingStartButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.surface.withAlpha(0),
+              colorScheme.surface.withAlpha(180),
+              colorScheme.surface,
+            ],
+            stops: const [0.0, 0.4, 1.0],
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
+        child: SafeArea(
+          top: false,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: colorScheme.primary.withAlpha(51),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              onPressed: () {
+                HapticFeedback.heavyImpact();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const FocusModePage()),
+                );
+              },
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.power_settings_new_rounded),
+                  SizedBox(width: 12),
+                  Text(
+                    'AVVIA SESSIONE',
+                    style: TextStyle(
+                      letterSpacing: 2.0,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PremiumSliverAppBar extends StatelessWidget {
+  final String title;
+  final IconData actionIcon;
+  final VoidCallback onActionTap;
+
+  const _PremiumSliverAppBar({
+    required this.title,
+    required this.actionIcon,
+    required this.onActionTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SliverAppBar(
+      pinned: true,
+      stretch: true,
+      expandedHeight: 140.0,
+      backgroundColor: Colors.transparent,
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+          child: FlexibleSpaceBar(
+            stretchModes: const [
+              StretchMode.zoomBackground,
+              StretchMode.fadeTitle,
+            ],
+            titlePadding: const EdgeInsets.only(left: 24.0, bottom: 16.0),
+            centerTitle: false,
+            title: Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
+            background: Container(color: colorScheme.surface.withAlpha(180)),
+          ),
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(actionIcon),
+          tooltip: 'Azione',
+          onPressed: onActionTap,
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
+}
+
 // --- TAB 2: ANALYTICS (PLACEHOLDER) ---
 class AnalyticsTab extends StatelessWidget {
   const AnalyticsTab({super.key});
@@ -570,42 +601,10 @@ class AnalyticsTab extends StatelessWidget {
         parent: AlwaysScrollableScrollPhysics(),
       ),
       slivers: [
-        SliverAppBar(
-          pinned: true,
-          stretch: true,
-          expandedHeight: 140.0,
-          backgroundColor: Colors.transparent,
-          flexibleSpace: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-              child: FlexibleSpaceBar(
-                stretchModes: const [
-                  StretchMode.zoomBackground,
-                  StretchMode.fadeTitle,
-                ],
-                titlePadding: const EdgeInsets.only(left: 24.0, bottom: 16.0),
-                centerTitle: false,
-                title: const Text(
-                  'Analytics',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                background: Container(
-                  color: colorScheme.surface.withAlpha(180),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.filter_list_rounded),
-              tooltip: 'Filtra dati',
-              onPressed: () => HapticFeedback.lightImpact(),
-            ),
-            const SizedBox(width: 8),
-          ],
+        _PremiumSliverAppBar(
+          title: 'Analytics',
+          actionIcon: Icons.filter_list_rounded,
+          onActionTap: () => HapticFeedback.lightImpact(),
         ),
         SliverFillRemaining(
           hasScrollBody: false,
