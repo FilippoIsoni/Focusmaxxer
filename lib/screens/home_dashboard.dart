@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/bio_provider.dart';
+import 'focus_mode_page.dart';
 
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -15,7 +16,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
   final List<Widget> _pages = [
     const _ReadinessPlaceholder(),
-    const _FocusTimerPlaceholder(),
+    const _FocusStartGate(),
     const _SettingsPlaceholder(),
   ];
 
@@ -118,29 +119,61 @@ class _ReadinessPlaceholder extends StatelessWidget {
 }
 
 // 2. FOCUS TIMER
-class _FocusTimerPlaceholder extends StatelessWidget {
-  const _FocusTimerPlaceholder();
+class _FocusStartGate extends StatelessWidget {
+  const _FocusStartGate();
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return SafeArea(
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.center_focus_strong_rounded,
-              size: 80,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Focus Session',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            const Text('Timer and pulsing ring will be implemented here.'),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.center_focus_strong_rounded,
+                size: 100,
+                color: colorScheme.primary.withAlpha(150),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                "READY TO FOCUS?",
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Your biometrics are stable. A 25-minute session is recommended based on your Readiness.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60),
+              ),
+              const SizedBox(height: 48),
+              
+              // IL TASTO CHE LANCIA LA SESSIONE A TUTTO SCHERMO
+              SizedBox(
+                width: double.infinity,
+                height: 64,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    // PUSH A TUTTO SCHERMO: Copre la Navigation Bar
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const FocusModePage(),
+                        fullscreenDialog: true, 
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bolt_rounded),
+                  label: const Text("START DEEP FOCUS"),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
