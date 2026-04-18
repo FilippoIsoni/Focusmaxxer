@@ -1,8 +1,9 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:math' as math;
-// Assicurati che il path corrisponda al file del tuo nuovo provider
-import '../providers/cognitive_engine_provider.dart'; 
+
+import '../providers/cognitive_engine_provider.dart';
 
 class FocusModePage extends StatefulWidget {
   const FocusModePage({super.key});
@@ -13,31 +14,63 @@ class FocusModePage extends StatefulWidget {
 
 class _FocusModePageState extends State<FocusModePage> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+  
+  // Variabili per la gestione del Timer
+  Timer? _uiTimer;
+  EngineState _previousState = EngineState.idle;
+  DateTime _currentStateStartTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
+    
     // Animazione fluida a 60fps gestita dalla GPU
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-    
-    // TODO: Attivare WakelockPlus.enable() qui
+
+    // Avvia un timer che aggiorna l'orologio ogni secondo
+    _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {}); // Forza il ricalcolo del testo del timer
+      }
+    });
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    // TODO: Disattivare WakelockPlus.disable() qui
+    _uiTimer?.cancel(); // Fondamentale per evitare Memory Leak!
     super.dispose();
+  }
+
+  // Metodo helper per formattare la durata (es. 05:30 o 01:25:00)
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    
+    if (duration.inHours > 0) {
+      return "${duration.inHours}:$twoDigitMinutes:$twoDigitSeconds";
+    }
+    return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
   @override
   Widget build(BuildContext context) {
-    // Ci mettiamo in ascolto del nuovo CognitiveEngine
     final engine = context.watch<CognitiveEngineProvider>();
     final colorScheme = Theme.of(context).colorScheme;
+
+    // Logica di reset del timer: se l'algoritmo cambia stato, azzeriamo il cronometro
+    if (engine.currentState != _previousState) {
+      _previousState = engine.currentState;
+      _currentStateStartTime = DateTime.now(); // Fissa il nuovo punto di partenza
+    }
+
+    // Calcolo del tempo trascorso nello stato attuale
+    final Duration elapsed = DateTime.now().difference(_currentStateStartTime);
+    final String timeString = _formatDuration(elapsed);
 
     // Calcolo della percentuale di fatica (Il livello del Leaky Bucket)
     final double fatiguePercent = engine.capacityMax > 0 
@@ -66,7 +99,6 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
         statusText = "SENSOR DISCONNECTED";
         break;
       case EngineState.idle:
-      default:
         ringColor = Colors.white30; // Dim
         statusText = "AWAITING SENSOR DATA...";
         break;
@@ -87,7 +119,7 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
                       color: ringColor,
                       animationValue: _pulseController.value,
                       fatiguePercent: fatiguePercent,
-                      // Micro-orbita anti burn-in OLED
+                      // Micro-orbita anti burn-in
                       orbitOffset: Offset(
                         math.sin(DateTime.now().millisecondsSinceEpoch / 1000) * 2,
                         math.cos(DateTime.now().millisecondsSinceEpoch / 1000) * 2,
@@ -100,7 +132,7 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
             ),
           ),
 
-          // 2. Contenuto Centrale (Timer, Stato e Livello Fatica)
+          // 2. Contenuto Centrale (Timer Reale, Stato e Livello Fatica)
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -115,20 +147,24 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  "25:00", // TODO: Sostituire con il timer reale della sessione
-                  style: TextStyle(
+                
+                // IL TIMER DINAMICO FORMATTATO
+                Text(
+                  engine.currentState == EngineState.idle ? "--:--" : timeString,
+                  style: const TextStyle(
                     fontSize: 64,
                     fontWeight: FontWeight.w200,
                     fontFamily: 'Courier', // Font monospazio per allineamento perfetto
                     color: Colors.white,
                   ),
                 ),
+                
                 const SizedBox(height: 12),
+                
                 // Indicatore numerico discreto del "Leaky Bucket"
                 Text(
                   "Cognitive Load: ${(fatiguePercent * 100).toInt()}%",
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white54,
                     letterSpacing: 1.5,
                     fontSize: 10,
@@ -150,7 +186,7 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
             ),
           ),
 
-          // 3. Pulsante di Uscita (Pressione lunga anti-errore)
+          // 3. Pulsante di Uscita
           Positioned(
             bottom: 60,
             left: 0,
@@ -158,8 +194,6 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
             child: Center(
               child: GestureDetector(
                 onLongPress: () {
-                  // TODO: In futuro, aprire il modale RPE per il Reinforcement Learning
-                  // prima di fare il pop.
                   Navigator.of(context).pop();
                 },
                 child: Container(
@@ -182,7 +216,7 @@ class _FocusModePageState extends State<FocusModePage> with SingleTickerProvider
   }
 }
 
-// Painter ottimizzato: ora disegna anche l'arco del "Secchio" (Fatigue Level)
+// PAINTER 
 class FocusRingPainter extends CustomPainter {
   final Color color;
   final double animationValue;
@@ -218,7 +252,6 @@ class FocusRingPainter extends CustomPainter {
     canvas.drawCircle(center, radius - 2, trackPaint);
 
     // 3. Anello di Fatica (Leaky Bucket Arc)
-    // Mostra un arco solido che cresce man mano che il secchio si riempie
     if (fatiguePercent > 0) {
       final fatiguePaint = Paint()
         ..color = color.withAlpha(200)
@@ -227,7 +260,6 @@ class FocusRingPainter extends CustomPainter {
         ..strokeWidth = 3.0;
 
       final rect = Rect.fromCircle(center: center, radius: radius - 2);
-      // Inizia dall'alto (-pi/2) e disegna un arco in base alla percentuale
       final sweepAngle = 2 * math.pi * fatiguePercent;
       canvas.drawArc(rect, -math.pi / 2, sweepAngle, false, fatiguePaint);
     }
@@ -237,7 +269,6 @@ class FocusRingPainter extends CustomPainter {
   bool shouldRepaint(FocusRingPainter oldDelegate) {
     return oldDelegate.animationValue != animationValue ||
            oldDelegate.color != color ||
-           oldDelegate.fatiguePercent != fatiguePercent ||
-           oldDelegate.orbitOffset != orbitOffset;
+           oldDelegate.fatiguePercent != fatiguePercent;
   }
 }
