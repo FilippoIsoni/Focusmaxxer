@@ -39,10 +39,12 @@ class BioReadiness {
 
   String get dynamicMessage {
     final rs = readinessScore;
-    if (rs >= 85)
+    if (rs >= 85) {
       return 'Pieno recupero cognitivo. Ideale per studiare argomenti complessi.';
-    if (rs >= 60)
+    }
+    if (rs >= 60) {
       return 'Recupero parziale. L\'app anticiperà leggermente le tue pause.';
+    }
     return 'Debito di sonno rilevato. Dedicati al ripasso ed evita sovraccarichi.';
   }
 
