@@ -37,16 +37,41 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   int _currentIndex = 0;
+  
+  // 1. Aggiungiamo un controller per gestire lo scorrimento
+  late PageController _pageController;
 
   final List<Widget> _pages = const [
     HomeTab(key: PageStorageKey('home_tab')),
     AnalyticsTab(key: PageStorageKey('analytics_tab')),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    // Inizializziamo il controller sulla pagina di partenza
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    // Ricordiamoci sempre di distruggere il controller per evitare memory leak!
+    _pageController.dispose();
+    super.dispose();
+  }
+
   void _updateTab(int index) {
     if (_currentIndex == index) return;
     HapticFeedback.selectionClick();
+    
     setState(() => _currentIndex = index);
+    
+    // 2. Diciamo al controller di scivolare verso la nuova pagina
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300), // Velocità dello scorrimento
+      curve: Curves.easeOutCubic, // Curva morbida per un effetto premium
+    );
   }
 
   @override
@@ -55,32 +80,12 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: Stack(
-        alignment: Alignment.topCenter,
-        children: List.generate(_pages.length, (index) {
-          final bool isActive = _currentIndex == index;
-
-          return TickerMode(
-            enabled: isActive,
-            child: ExcludeSemantics(
-              excluding: !isActive,
-              child: IgnorePointer(
-                ignoring: !isActive,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeOutQuart,
-                  opacity: isActive ? 1.0 : 0.0,
-                  child: AnimatedScale(
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeOutQuart,
-                    scale: isActive ? 1.0 : 0.95,
-                    child: _pages[index],
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
+      // 3. Sostituiamo IndexedStack con PageView
+      body: PageView(
+        controller: _pageController,
+        // Impedisce all'utente di scorrere trascinando col dito (mantiene il controllo solo sulla Navigation Bar)
+        physics: const NeverScrollableScrollPhysics(), 
+        children: _pages,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
@@ -100,67 +105,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
           ),
         ],
       ),
-    );
-  }
-}
-
-// --- TAB 1: READINESS E AVVIO SESSIONE ---
-class HomeTab extends StatelessWidget {
-  const HomeTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
-    final colorScheme = theme.colorScheme;
-
-    return Stack(
-      children: [
-        CustomScrollView(
-          primary: false,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          slivers: [
-            _PremiumSliverAppBar(
-              title: 'FocusMaxxer',
-              actionIcon: Icons.account_circle_outlined,
-              onActionTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ProfilePage()));
-              },
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24.0, 16.0, 24.0, 130.0),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  Text(
-                    'Buongiorno.',
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w300,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Baseline fisiologica acquisita.',
-                    style: textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  const _ReadinessCard(),
-                  const SizedBox(height: 32),
-                  const _KeyFactorsSection(),
-                ]),
-              ),
-            ),
-          ],
-        ),
-        const _FloatingStartButton(),
-      ],
     );
   }
 }
@@ -581,6 +525,48 @@ class _PremiumSliverAppBar extends StatelessWidget {
           onPressed: onActionTap,
         ),
         const SizedBox(width: 8),
+      ],
+    );
+  }
+}
+
+// --- TAB 1: HOME ---
+class HomeTab extends StatelessWidget {
+  const HomeTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        CustomScrollView(
+          primary: false,
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            _PremiumSliverAppBar(
+              title: 'FocusMaxxer',
+              actionIcon: Icons.person_outline_rounded,
+              onActionTap: () {
+                HapticFeedback.lightImpact();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                );
+              },
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  const _ReadinessCard(),
+                  const SizedBox(height: 32),
+                  const _KeyFactorsSection(),
+                ]),
+              ),
+            ),
+          ],
+        ),
+        const _FloatingStartButton(),
       ],
     );
   }
