@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'home_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,18 +15,38 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  @override // 1. Pulizia dei Controller per evitare memory leak
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
-  Future<void> _handleLogin() async {
+ Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
     try {
+      // 1. Aspettiamo che il Provider scriva su disco e dia l'OK
       await context.read<AuthProvider>().login(
         _emailController.text,
         _passwordController.text,
       );
-    } catch (e) {
+      
+      // 2. Controllo di sicurezza standard di Flutter
       if (!mounted) return;
+      
+      // 3. LA NAVIGAZIONE DIRETTA: 
+      // Usiamo pushReplacement per impedire all'utente di tornare al login col tasto "Indietro"
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeDashboard()),
+      );
+
+    } catch (e) {
+      // Se la password è "admin/123", questo blocco scatta.
+      if (!mounted) return;
+      
+      // Spegniamo l'icona di caricamento per fargli riprovare
       setState(() => _isLoading = false);
 
       ScaffoldMessenger.of(context).showSnackBar(

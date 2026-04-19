@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'login_page.dart';
 
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
@@ -33,9 +34,22 @@ class _OnboardingPageState extends State<OnboardingPage> {
       'icon': Icons.bolt_rounded,
     },
   ];
+  @override // Pulizia del Controller per evitare memory leak
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+Future<void> _finishOnboarding() async {
+    // 1. Salviamo nella memoria del telefono che l'utente ha finito il tutorial
+    await context.read<AuthProvider>().completeOnboarding();
 
-  void _finishOnboarding() {
-    context.read<AuthProvider>().completeOnboarding();
+    // 2. Controllo di sicurezza di Flutter
+    if (!mounted) return;
+
+    // 3. Navigazione diretta alla pagina di Login, distruggendo l'Onboarding
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
   }
 
   @override

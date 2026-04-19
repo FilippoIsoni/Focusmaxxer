@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'login_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -117,17 +118,22 @@ class ProfilePage extends StatelessWidget {
               'DISCONNETTI',
               style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
             ),
-            onPressed: () {
+            onPressed: () async {
               HapticFeedback.mediumImpact();
 
-              // 1. Chiudiamo tutte le pagine sovrapposte (come la pagina Profilo)
-              // e torniamo alla "radice" del Navigator.
-              Navigator.of(context).popUntil((route) => route.isFirst);
+              // 1. Scriviamo su disco che l'utente è uscito
+              await context.read<AuthProvider>().logout();
 
-              // 2. Diciamo al Provider che siamo disconnessi.
-              // Il main.dart intercetterà questo cambio e trasformerà
-              // istantaneamente la radice nella LoginPage.
-              context.read<AuthProvider>().logout();
+              // 2. Sicurezza Flutter per il contesto
+              if (!context.mounted) return;
+
+              // 3. Importante: pushAndRemoveUntil distrugge tutto l'albero di navigazione
+              // (inclusa la ProfilePage e la HomeDashboard) e piazza la LoginPage come radice.
+              // Importa 'login_page.dart' in cima al file se non c'è già!
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginPage()),
+                (Route<dynamic> route) => false, 
+              );
             },
           ),
         ],
