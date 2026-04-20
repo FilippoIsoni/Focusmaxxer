@@ -5,8 +5,15 @@ enum AuthStatus { unknown, firstTime, unauthenticated, authenticated }
 
 class AuthProvider extends ChangeNotifier {
   AuthStatus _status = AuthStatus.unknown;
+  // variabili per nome, cognome e soprannome
+  String _name = '';
+  String _surname = '';
+  String _nickname = '';
 
   AuthStatus get status => _status;
+  String get name => _name;
+  String get surname => _surname;
+  String get nickname => _nickname;
 
   AuthProvider() {
     _checkInitialState();
@@ -19,6 +26,11 @@ class AuthProvider extends ChangeNotifier {
     // Controlliamo i dati salvati. Se non ci sono, usiamo i default (true per il primo avvio)
     bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
     bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+   
+    // Leggiamo anche i dati del profilo, se esistono
+    _name = prefs.getString('profile_name') ?? '';
+    _surname = prefs.getString('profile_surname') ?? '';
+    _nickname = prefs.getString('profile_nickname') ?? 'Student';
 
     // Decidiamo lo stato iniziale basandoci sulla memoria
     if (isFirstTime) {
@@ -56,12 +68,46 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // 4. CANCELLA il login dalla memoria
+  // CANCELLA il login dalla memoria
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', false); // Dimentica l'utente
     
     _status = AuthStatus.unauthenticated;
+    notifyListeners();
+  }
+
+  // --- NUOVI METODI PER IL PROFILO ---
+
+  //Salva i dati anagrafici inseriti dall'utente
+  Future<void> updateProfile(String newName, String newSurname, String newNickname) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    await prefs.setString('profile_name', newName);
+    await prefs.setString('profile_surname', newSurname);
+    await prefs.setString('profile_nickname', newNickname);
+
+    // Aggiorniamo la RAM e avvisiamo la UI
+    _name = newName;
+    _surname = newSurname;
+    _nickname = newNickname;
+    
+    notifyListeners();
+  }
+
+  //Cancella solo l'identità (usato dal tasto rosso della ProfilePage)
+  Future<void> clearProfileData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    await prefs.remove('profile_name');
+    await prefs.remove('profile_surname');
+    await prefs.remove('profile_nickname');
+
+    // Resettiamo la RAM ai valori di default
+    _name = '';
+    _surname = '';
+    _nickname = 'Student';
+    
     notifyListeners();
   }
 }
