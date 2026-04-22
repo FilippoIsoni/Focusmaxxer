@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/cognitive_engine_provider.dart';
+import '../providers/auth_provider.dart'; 
 
 import 'profile_page.dart';
 import 'focus_mode_page.dart';
@@ -11,26 +12,22 @@ import 'focus_mode_page.dart';
 // ==========================================
 // SEMANTIC INTERPRETER (Presentation Layer)
 // ==========================================
-/// Translates raw SAFTE math into human-readable UI colors, labels, and states.
 class SafteSemanticInterpreter {
   static const double optimalThreshold = 90.0;
   static const double warningThreshold = 77.0;
 
-  /// Determines the main theme color based on the Effectiveness score.
   static Color getEffectivenessColor(double score, ColorScheme cs) {
-    if (score >= optimalThreshold) return cs.primary; // Teal
-    if (score >= warningThreshold) return cs.secondary; // Amber
-    return cs.error; // Rose
+    if (score >= optimalThreshold) return cs.primary; 
+    if (score >= warningThreshold) return cs.secondary; 
+    return cs.error; 
   }
 
-  /// Returns a short label for the readiness status.
   static String getEffectivenessLabel(double score) {
     if (score >= optimalThreshold) return 'OPTIMAL';
     if (score >= warningThreshold) return 'BALANCED';
     return 'COMPROMISED';
   }
 
-  /// Returns a detailed clinical message for the Readiness Card.
   static String getReadinessMessage(double score) {
     if (score >= optimalThreshold) {
       return "Your cognitive battery is fully primed. Perfect time for deep work.";
@@ -41,8 +38,6 @@ class SafteSemanticInterpreter {
     return "Clinical lock advised. Your biological metrics suggest severe fatigue.";
   }
 
-  // --- COMPONENT FORMATTERS ---
-
   static String getReservoirStatus(double ratio) {
     if (ratio > 0.8) return 'High';
     if (ratio > 0.4) return 'Draining';
@@ -50,14 +45,12 @@ class SafteSemanticInterpreter {
   }
 
   static String getCircadianStatus(double cValue) {
-    // cValue is a harmonic oscillator. Positive means peak, negative means trough.
     if (cValue > 0.5) return 'Peak';
     if (cValue > -0.5) return 'Stable';
     return 'Slump';
   }
 
   static String getInertiaStatus(double effectiveness, double reservoirRatio) {
-    // If effectiveness is low but reservoir is high, it's likely sleep inertia.
     if (effectiveness < 90.0 && reservoirRatio > 0.9) return 'Active';
     return 'Cleared';
   }
@@ -115,8 +108,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
       backgroundColor: theme.colorScheme.surface,
       body: PageView(
         controller: _pageController,
-        physics:
-            const NeverScrollableScrollPhysics(), // Managed strictly by NavBar
+        physics: const NeverScrollableScrollPhysics(), 
         children: _pages,
       ),
       bottomNavigationBar: NavigationBar(
@@ -151,8 +143,6 @@ class _ReadinessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // Reactive binding to the Cognitive Engine
     final engine = context.watch<CognitiveEngineProvider>();
     final double score = engine.currentEffectiveness;
 
@@ -197,13 +187,10 @@ class _ReadinessCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 32),
-
-            // Animated Circular Score
             SizedBox(
               height: 180,
               width: 180,
               child: TweenAnimationBuilder<double>(
-                // Missing 'begin' ensures smooth transitions between state updates without flashing to 0
                 tween: Tween<double>(end: score / 100.0),
                 duration: const Duration(milliseconds: 1800),
                 curve: Curves.easeOutExpo,
@@ -283,10 +270,8 @@ class _KeyFactorsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final engine = context.watch<CognitiveEngineProvider>();
-    // Assume safteSnapshot is available via getter in the Provider
     final safte = engine.safteSnapshot;
 
-    // Calculate component ratios for the UI
     final double reservoirRatio = safte.reservoir / engine.capacityMax;
 
     return Column(
@@ -304,8 +289,6 @@ class _KeyFactorsSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-
-        // 1. Homeostatic Reservoir (R)
         _ContributorTile(
           icon: Icons.battery_charging_full_rounded,
           title: 'Homeostatic Reservoir',
@@ -319,8 +302,6 @@ class _KeyFactorsSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-
-        // 2. Circadian Rhythm (C)
         _ContributorTile(
           icon: Icons.waves_rounded,
           title: 'Circadian Rhythm',
@@ -331,8 +312,6 @@ class _KeyFactorsSection extends StatelessWidget {
           statusColor: theme.colorScheme.tertiary,
         ),
         const SizedBox(height: 8),
-
-        // 3. Sleep Inertia (I)
         _ContributorTile(
           icon: Icons.snooze_rounded,
           title: 'Sleep Inertia',
@@ -440,7 +419,6 @@ class _FloatingStartButton extends StatelessWidget {
     final theme = Theme.of(context);
     final engine = context.watch<CognitiveEngineProvider>();
 
-    // Clinical check: is the user energized enough to start?
     final bool isEngineReady =
         engine.currentEffectiveness >=
         SafteSemanticInterpreter.warningThreshold;
@@ -493,10 +471,7 @@ class _FloatingStartButton extends StatelessWidget {
               onPressed: isEngineReady
                   ? () {
                       HapticFeedback.heavyImpact();
-
-                      // Initiates the cognitive engine state machine
                       context.read<CognitiveEngineProvider>().startSession();
-
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const FocusModePage(),
@@ -527,13 +502,16 @@ class _FloatingStartButton extends StatelessWidget {
   }
 }
 
+// L'app bar fusa e corretta: accetta titolo e sottotitolo opzionale
 class _PremiumSliverAppBar extends StatelessWidget {
   final String title;
+  final String? subtitle; // Parametro opzionale per il saluto
   final IconData actionIcon;
   final VoidCallback onActionTap;
 
   const _PremiumSliverAppBar({
     required this.title,
+    this.subtitle,
     required this.actionIcon,
     required this.onActionTap,
   });
@@ -557,12 +535,27 @@ class _PremiumSliverAppBar extends StatelessWidget {
             ],
             titlePadding: const EdgeInsets.only(left: 24.0, bottom: 16.0),
             centerTitle: false,
-            title: Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
+            title: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                if (subtitle != null) // Disegna il sottotitolo solo se esiste
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      fontSize: 12, 
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.primary, 
+                    ),
+                  ),
+              ],
             ),
             background: Container(color: colorScheme.surface.withAlpha(180)),
           ),
@@ -589,38 +582,43 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        CustomScrollView(
-          primary: false,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          slivers: [
-            _PremiumSliverAppBar(
-              title: 'FocusMaxxer',
-              actionIcon: Icons.person_outline_rounded,
-              onActionTap: () {
-                HapticFeedback.lightImpact();
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ProfilePage()));
-              },
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  const _ReadinessCard(),
-                  const SizedBox(height: 32),
-                  const _KeyFactorsSection(),
-                ]),
+    return Consumer<AuthProvider>(
+      builder: (context, auth, child) {
+        return Stack(
+          children: [
+            CustomScrollView(
+              primary: false,
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
+              slivers: [
+                _PremiumSliverAppBar(
+                  title: 'FocusMaxxer', // Il titolo fisso
+                  subtitle: 'Hi, ${auth.nickname}', // Il saluto dinamico
+                  actionIcon: Icons.person_outline_rounded,
+                  onActionTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ProfilePage())
+                    );
+                  },
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      const _ReadinessCard(),
+                      const SizedBox(height: 32),
+                      const _KeyFactorsSection(),
+                    ]),
+                  ),
+                ),
+              ],
             ),
+            const _FloatingStartButton(),
           ],
-        ),
-        const _FloatingStartButton(),
-      ],
+        );
+      },
     );
   }
 }
@@ -639,7 +637,7 @@ class AnalyticsTab extends StatelessWidget {
       ),
       slivers: [
         _PremiumSliverAppBar(
-          title: 'Analytics',
+          title: 'Analytics', // Solo il titolo, niente sottotitolo qui
           actionIcon: Icons.filter_list_rounded,
           onActionTap: () => HapticFeedback.lightImpact(),
         ),
