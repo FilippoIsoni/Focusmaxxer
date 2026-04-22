@@ -18,11 +18,11 @@ class _SessionReportPageState extends State<SessionReportPage> {
   void _finishSession() {
     final engine = context.read<CognitiveEngineProvider>();
 
-    // Inviamo il feedback al "Digital Twin" per affinare l'algoritmo
-    engine.submitFeedback(_selectedRpe, widget.duration.inMinutes);
-
-    // Resettiamo il motore per la prossima volta
-    engine.resetSession();
+    // NEL NUOVO MODELLO SAFTE:
+    // Il feedback dell'utente (RPE) non ricalibra più manualmente il "secchio",
+    // ma potrà essere inviato al database per le tue Analytics future.
+    // La chiusura sicura della sessione e dei timer è ora gestita da endSession().
+    engine.endSession();
 
     HapticFeedback.mediumImpact();
     // Torniamo alla Dashboard
@@ -101,8 +101,8 @@ class _SessionReportPageState extends State<SessionReportPage> {
                           _buildStatItem(
                             context,
                             'FOCUS STATE',
-                            'Stable',
-                          ), // Placeholder per dati futuri
+                            'Stable', // Placeholder per dati biometrici futuri
+                          ),
                         ],
                       ),
                     ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../widgets/biometric_ring.dart';
 import '../providers/cognitive_engine_provider.dart';
 import 'session_report.dart'; // <-- IMPORTANTE: Aggiunto l'import della nuova pagina
+import 'break_mode_page.dart';
 
 class FocusModePage extends StatefulWidget {
   const FocusModePage({super.key});
@@ -98,44 +99,84 @@ class _FocusModePageState extends State<FocusModePage> {
               bottom: 40,
               left: 0,
               right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onLongPress: () {
-                    HapticFeedback.heavyImpact();
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // --- 4A. PAUSA MANUALE ---
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
 
-                    // Calcoliamo la durata basandoci sull'avvio della pagina
-                    final elapsed = DateTime.now().difference(
-                      _sessionStartTime,
-                    );
+                      // 1. Diciamo al motore SAFTE di avviare la pausa
+                      context
+                          .read<CognitiveEngineProvider>()
+                          .manualTransitionToBreak();
 
-                    // Navighiamo verso il Session Report
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => SessionReportPage(duration: elapsed),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
+                      // 2. Navighiamo verso la schermata Zen
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const BreakModePage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.pause_circle_outline_rounded,
+                      size: 20,
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(13),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: Colors.white.withAlpha(25)),
-                    ),
-                    child: const Text(
-                      "TIENI PREMUTO PER USCIRE",
+                    label: const Text(
+                      "MANUAL BREAK",
                       style: TextStyle(
-                        color: Colors.white54,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 2.0,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white54,
+                      side: BorderSide(color: Colors.white.withAlpha(25)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
                       ),
                     ),
                   ),
-                ),
+
+                  const SizedBox(width: 16), // Spazio vitale tra i pulsanti
+                  // --- 4B. USCITA DEFINITIVA ---
+                  GestureDetector(
+                    onLongPress: () {
+                      HapticFeedback.heavyImpact();
+                      final elapsed = DateTime.now().difference(
+                        _sessionStartTime,
+                      );
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (_) => SessionReportPage(duration: elapsed),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(13),
+                        borderRadius: BorderRadius.circular(30),
+                        border: Border.all(color: Colors.white.withAlpha(25)),
+                      ),
+                      child: const Text(
+                        "HOLD TO END", // Tradotto in inglese per coerenza
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

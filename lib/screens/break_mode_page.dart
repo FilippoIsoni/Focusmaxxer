@@ -17,7 +17,7 @@ class _BreakModePageState extends State<BreakModePage>
   @override
   void initState() {
     super.initState();
-    // Ciclo di respirazione guidata (Box Breathing morbido: 4s inspirazione, 4s espirazione)
+    // Ciclo di respirazione guidata (Box Breathing morbido)
     _breathController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
@@ -36,8 +36,8 @@ class _BreakModePageState extends State<BreakModePage>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // L'app decide in background quando la pausa è finita
-    final bool canResume = engine.currentState != EngineState.breakMode;
+    // NUOVA LOGICA SAFTE: Usiamo i flag dell'Advisory System
+    final bool canResume = engine.isFocusRecommended;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -75,7 +75,7 @@ class _BreakModePageState extends State<BreakModePage>
               },
             ),
 
-            // 2. CONTENUTO ZEN (In inglese, essenziale)
+            // 2. CONTENUTO ZEN
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -97,19 +97,29 @@ class _BreakModePageState extends State<BreakModePage>
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Take a break and rest',
+                    'Adaptive Break',
                     style: theme.textTheme.headlineSmall?.copyWith(
-                      // Leggermente rimpicciolito per l'inglese
                       fontWeight: FontWeight.bold,
                       color: colorScheme.onSurface,
                       letterSpacing: 1.5,
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Look away from the screen.',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+
+                  // NUOVO: Mostriamo il messaggio live del motore biometrico!
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Text(
+                      engine.advisoryMessage, // Es: "Vagal tone altered..."
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: canResume
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
+                        fontWeight: canResume
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
                     ),
                   ),
                 ],
@@ -128,6 +138,8 @@ class _BreakModePageState extends State<BreakModePage>
                   onPressed: canResume
                       ? () {
                           HapticFeedback.lightImpact();
+                          // NUOVO: Diciamo al motore di ricominciare a studiare!
+                          engine.manualTransitionToFocus();
                           Navigator.of(context).pop();
                         }
                       : () {
@@ -135,7 +147,7 @@ class _BreakModePageState extends State<BreakModePage>
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: const Text(
-                                'Your body is still recovering...',
+                                'Wait for vagal tone restoration...',
                               ),
                               backgroundColor: colorScheme.surface,
                               duration: const Duration(seconds: 2),
