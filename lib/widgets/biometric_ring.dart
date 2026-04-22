@@ -21,9 +21,8 @@ class _BiometricRingState extends State<BiometricRing>
   late AnimationController _breathingController;
   late Animation<double> _pulseAnimation;
 
-  // Allocazione Zero: i Paint risiedono stabilmente in memoria
+  // Cached paint objects to avoid reallocation during 60fps animations
   final Paint _backgroundPaint = Paint()
-    ..color = Colors.white.withAlpha(13)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 12
     ..strokeCap = StrokeCap.round;
@@ -42,6 +41,7 @@ class _BiometricRingState extends State<BiometricRing>
   @override
   void initState() {
     super.initState();
+    // Hardware-accelerated breathing animation (Vagal tone simulation)
     _breathingController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -61,43 +61,54 @@ class _BiometricRingState extends State<BiometricRing>
     super.dispose();
   }
 
-  Color _getStateColor() {
+  /// Maps the clinical engine state to the global Theme ColorScheme
+  Color _getStateColor(ColorScheme colorScheme) {
     switch (widget.state) {
       case EngineState.focus:
-        return const Color(0xFFFBBF24);
+        return colorScheme.primary; // Teal
+      case EngineState.analyzingBaseline:
+        return colorScheme.tertiary; // Light Blue
       case EngineState.breakMode:
-        return const Color(0xFF38BDF8);
-      case EngineState.routine:
-        return const Color(0xFF2DD4BF);
-      case EngineState.disconnected:
-        return const Color(0xFF64748B);
+        return colorScheme.secondary; // Amber
+      case EngineState.inhibited:
+      case EngineState.dailyLimitReached:
+        return colorScheme.error; // Rose
       case EngineState.idle:
-        return const Color(0xFF334155);
+      case EngineState.sessionEnded:
+        return colorScheme.onSurface.withAlpha(51); // Dimmed surface color
     }
   }
 
+  /// Maps the clinical engine state to user-friendly UI labels
   String _getStateLabel() {
     switch (widget.state) {
       case EngineState.focus:
         return "DEEP FOCUS";
+      case EngineState.analyzingBaseline:
+        return "CALIBRATING";
       case EngineState.breakMode:
-        return "RECUPERO";
-      case EngineState.routine:
-        return "ROUTINE";
-      case EngineState.disconnected:
-        return "NO SEGNALE";
+        return "RECOVERY";
+      case EngineState.inhibited:
+        return "CLINICAL LOCK";
+      case EngineState.dailyLimitReached:
+        return "LIMIT REACHED";
       case EngineState.idle:
-        return "IN ATTESA";
+      case EngineState.sessionEnded:
+        return "STANDBY";
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final targetColor = _getStateColor();
+    // Dynamically inject the global theme
+    final theme = Theme.of(context);
+    final targetColor = _getStateColor(theme.colorScheme);
 
-    double safePercentage = widget.fatiguePercentage;
-    if (safePercentage.isNaN || safePercentage.isInfinite) safePercentage = 0.0;
-    safePercentage = safePercentage.clamp(0.0, 1.0);
+    // Safety clamp to prevent rendering overflow
+    final double safePercentage = widget.fatiguePercentage.clamp(0.0, 1.0);
+
+    // Apply background color based on the current theme surface
+    _backgroundPaint.color = theme.colorScheme.onSurface.withAlpha(13);
 
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: safePercentage),
@@ -111,7 +122,7 @@ class _BiometricRingState extends State<BiometricRing>
           builder: (context, color, _) {
             final currentColor = color ?? targetColor;
 
-            // Mutazione in memoria per performance
+            // Update paint objects with the newly animated color
             _activePaint.color = currentColor;
             _glowPaint.color = currentColor.withAlpha(77);
 
@@ -123,12 +134,10 @@ class _BiometricRingState extends State<BiometricRing>
                 children: [
                   AnimatedBuilder(
                     animation: _pulseAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: _pulseAnimation.value,
-                        child: child,
-                      );
-                    },
+                    builder: (context, child) => Transform.scale(
+                      scale: _pulseAnimation.value,
+                      child: child,
+                    ),
                     child: RepaintBoundary(
                       child: SizedBox(
                         width: 320,
@@ -136,21 +145,17 @@ class _BiometricRingState extends State<BiometricRing>
                         child: CustomPaint(
                           painter: _RingPainter(
                             fillPercentage: animatedPercentage,
-                            activeColor:
-                                currentColor, // FIX 1: Passato per il tracciamento in shouldRepaint
                             backgroundPaint: _backgroundPaint,
                             activePaint: _activePaint,
                           ),
                           foregroundPainter: _GlowPainter(
                             fillPercentage: animatedPercentage,
-                            activeColor: currentColor, // FIX 1
                             glowPaint: _glowPaint,
                           ),
                         ),
                       ),
                     ),
                   ),
-
                   SizedBox(
                     width: 200,
                     child: FittedBox(
@@ -160,7 +165,7 @@ class _BiometricRingState extends State<BiometricRing>
                         children: [
                           Text(
                             _getStateLabel(),
-                            style: TextStyle(
+                            style: theme.textTheme.labelMedium?.copyWith(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 2.0,
@@ -170,19 +175,21 @@ class _BiometricRingState extends State<BiometricRing>
                           const SizedBox(height: 8),
                           Text(
                             "${(animatedPercentage * 100).round()}%",
-                            style: const TextStyle(
+                            style: theme.textTheme.displayLarge?.copyWith(
                               fontSize: 48,
                               fontWeight: FontWeight.w200,
-                              color: Colors.white,
-                              fontFeatures: [FontFeature.tabularFigures()],
+                              color: theme.colorScheme.onSurface,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                           ),
-                          const Text(
-                            "FATICA COGNITIVA",
-                            style: TextStyle(
+                          Text(
+                            "COGNITIVE FATIGUE",
+                            style: theme.textTheme.labelSmall?.copyWith(
                               fontSize: 10,
                               letterSpacing: 1.5,
-                              color: Colors.white54,
+                              color: theme.colorScheme.onSurface.withAlpha(127),
                             ),
                           ),
                         ],
@@ -199,15 +206,17 @@ class _BiometricRingState extends State<BiometricRing>
   }
 }
 
+// ==========================================
+// LOW-LEVEL RENDERING PAINTERS
+// ==========================================
+
 class _RingPainter extends CustomPainter {
   final double fillPercentage;
-  final Color activeColor;
   final Paint backgroundPaint;
   final Paint activePaint;
 
   _RingPainter({
     required this.fillPercentage,
-    required this.activeColor,
     required this.backgroundPaint,
     required this.activePaint,
   });
@@ -217,19 +226,18 @@ class _RingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = min(size.width / 2, size.height / 2) - 40;
 
+    // Draw the subtle background track
     canvas.drawCircle(center, radius, backgroundPaint);
 
-    // FIX 2: Soglia dell'1% per evitare l'artefatto "Goccia"
+    // Draw the active progress arc
     if (fillPercentage > 0.01) {
       if (fillPercentage >= 1.0) {
         canvas.drawCircle(center, radius, activePaint);
       } else {
-        final startAngle = -pi / 2;
-        final sweepAngle = 2 * pi * fillPercentage;
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: radius),
-          startAngle,
-          sweepAngle,
+          -pi / 2,
+          2 * pi * fillPercentage,
           false,
           activePaint,
         );
@@ -238,39 +246,31 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) {
-    // FIX 1: Confronto su valori primitivi immutabili, non su puntatori di memoria
-    return oldDelegate.fillPercentage != fillPercentage ||
-        oldDelegate.activeColor != activeColor;
-  }
+  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
+      oldDelegate.fillPercentage != fillPercentage ||
+      oldDelegate.activePaint.color != activePaint.color;
 }
 
 class _GlowPainter extends CustomPainter {
   final double fillPercentage;
-  final Color activeColor;
   final Paint glowPaint;
 
-  _GlowPainter({
-    required this.fillPercentage,
-    required this.activeColor,
-    required this.glowPaint,
-  });
+  _GlowPainter({required this.fillPercentage, required this.glowPaint});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = min(size.width / 2, size.height / 2) - 40;
 
+    // Draw the blurred ambient glow matching the arc
     if (fillPercentage > 0.01) {
       if (fillPercentage >= 1.0) {
         canvas.drawCircle(center, radius, glowPaint);
       } else {
-        final startAngle = -pi / 2;
-        final sweepAngle = 2 * pi * fillPercentage;
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: radius),
-          startAngle,
-          sweepAngle,
+          -pi / 2,
+          2 * pi * fillPercentage,
           false,
           glowPaint,
         );
@@ -279,8 +279,7 @@ class _GlowPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GlowPainter oldDelegate) {
-    return oldDelegate.fillPercentage != fillPercentage ||
-        oldDelegate.activeColor != activeColor;
-  }
+  bool shouldRepaint(covariant _GlowPainter oldDelegate) =>
+      oldDelegate.fillPercentage != fillPercentage ||
+      oldDelegate.glowPaint.color != glowPaint.color;
 }

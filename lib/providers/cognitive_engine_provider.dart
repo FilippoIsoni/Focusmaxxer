@@ -1,201 +1,409 @@
-import 'dart:math';
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../models/hr_point.dart';
 
-enum EngineState { focus, routine, breakMode, disconnected, idle }
+import '../models/daily_baseline.dart';
+import '../models/safte_state.dart';
+import '../services/simulator_service.dart';
+import '../functions/safte_engine.dart';
+import '../functions/biometric_analyzer.dart';
+
+/// Defines the finite state machine for the cognitive session.
+enum EngineState {
+  idle,
+  analyzingBaseline,
+  focus,
+  breakMode,
+  inhibited,
+  dailyLimitReached,
+  sessionEnded,
+}
 
 class CognitiveEngineProvider extends ChangeNotifier {
-  static const int windowDurationMinutes = 3;
-  final List<HRPoint> _rollingWindow = [];
+  // ==========================================
+  // DEPENDENCIES & DOMAIN ENGINES
+  // ==========================================
 
-  double _morningRestingHR = 60.0;
-  int _currentReadinessScore = 100;
-  DateTime? _wakeUpTimeUtc;
+  final BiometricAnalyzer _biometrics = BiometricAnalyzer();
+  final ITickerService _ticker;
+  ScenarioSimulator _scenarioSimulator;
+  StreamSubscription<void>? _tickSubscription;
 
-  double _currentFatigue = 0.0;
-  final double _baseCapacity = 1000.0;
+  // ==========================================
+  // CONFIGURATION CONSTANTS
+  // ==========================================
 
-  double alpha = 15.0;
-  double beta = 25.0;
-  double delta = 2.0;
+  static const int dailyMaxSeconds = 240 * 60; // 4 hours biological limit
+  static const int tickDurationSeconds = 5; // 0.2 Hz update rate
+  static const int idleTickMinutes = 1; // Background update rate
+
+  // SAFTE Segmentation Thresholds
+  static const double _optimalSafteThreshold = 90.0;
+  static const double _inhibitedSafteThreshold = 77.0;
+  static const int _optimalSegmentMinutes = 52;
+  static const int _baseSegmentMinutes = 25;
+  static const double _segmentScalingFactor = 27.0;
+  static const double _safteRangeDivisor = 13.0; // (90.0 - 77.0)
+
+  // Break Dynamics
+  static const double _breakDurationRatio = 0.33; // 33% of focused time
+  static const int _breakExtensionSeconds = 300; // 5 extra minutes per failure
+  static const int _maxBreakExtensions = 3; // Max permitted extensions
+
+  // ==========================================
+  // INTERNAL STATE
+  // ==========================================
 
   EngineState _currentState = EngineState.idle;
-  DateTime? _lastUpdateUtc;
-  DateTime? _simulatedClockUtc;
-  DateTime? _lastInferenceTimeUtc;
-  DateTime? _stateStartTimeUtc;
-  bool _hasIncompleteRecovery = false;
+
+  // SAFTE tracking
+  late SafteState _safteState;
+  late DateTime _internalClock;
+  DateTime _wakeupTime =
+      DateTime.now(); // Safe fallback to prevent LateInitializationError
+  int _currentDay = DateTime.now().day; // Midnight rollover tracker
+
+  // Time tracking
+  int _targetSegmentSeconds = 0;
+  int _targetBreakSeconds = 0;
+  int _elapsedFocusSeconds = 0;
+  int _elapsedBreakSeconds = 0;
+  int _dailyWorkedSeconds = 0;
+  int _breakExtensions = 0;
+
+  // Advisory Paradigm (Human-in-the-loop flags)
+  bool _isBreakRecommended = false;
+  bool _isFocusRecommended = false;
+  String _advisoryMessage = "";
+
+  // ==========================================
+  // PUBLIC GETTERS (For UI Consumption)
+  // ==========================================
 
   EngineState get currentState => _currentState;
-  double get currentFatigue => _currentFatigue;
-  double get capacityMax =>
-      max(100.0, _baseCapacity * (_currentReadinessScore / 100.0));
-  bool get hasIncompleteRecovery => _hasIncompleteRecovery;
+  SafteState get safteSnapshot => _safteState;
 
-  void updateReadiness(int score, double rhr, DateTime? wakeUp) {
-    _currentReadinessScore = score;
-    _morningRestingHR = rhr;
-    _wakeUpTimeUtc = wakeUp;
-    _currentFatigue = min(_currentFatigue, capacityMax);
-    notifyListeners();
-  }
+  // SAFTE Metrics
+  double get currentEffectiveness => _safteState.effectiveness;
+  double get currentFatigue =>
+      SafteEngine.maxReservoirCapacity - _safteState.reservoir;
+  double get capacityMax => SafteEngine.maxReservoirCapacity;
 
-  void resetSession() {
-    _rollingWindow.clear();
-    _currentFatigue = 0.0;
-    _currentState = EngineState.idle;
-    _hasIncompleteRecovery = false;
-    _lastUpdateUtc = null;
-    _simulatedClockUtc = null;
-    _lastInferenceTimeUtc = null;
-    _stateStartTimeUtc = null;
-    notifyListeners();
-  }
+  // Session Metrics
+  int get segmentDurationMinutes => _targetSegmentSeconds ~/ 60;
+  int get workedTodayMinutes => _dailyWorkedSeconds ~/ 60;
+  bool get hasIncompleteRecovery => _breakExtensions > 0;
+  double get morningRHR => _biometrics.muBase;
 
-  void ingestBatch(List<HRPoint> batch) {
-    if (batch.isEmpty) return;
-    batch.sort((a, b) => a.timestampUtc.compareTo(b.timestampUtc));
-    _simulatedClockUtc = batch.last.timestampUtc;
+  // Advisory System
+  bool get isBreakRecommended => _isBreakRecommended;
+  bool get isFocusRecommended => _isFocusRecommended;
+  String get advisoryMessage => _advisoryMessage;
 
-    for (var point in batch) {
-      if (point.confidence < 2 || point.isMoving) continue;
-      _rollingWindow.add(point);
+  /// Returns the exact active seconds based on current mode to sync UI with the WarpTicker
+  int get currentSessionSeconds {
+    if (_currentState == EngineState.analyzingBaseline ||
+        _currentState == EngineState.focus) {
+      return _elapsedFocusSeconds;
     }
-
-    if (_rollingWindow.isEmpty) {
-      _checkDisconnection();
-      return;
-    }
-
-    _lastUpdateUtc = _rollingWindow.last.timestampUtc;
-    final cutoffTime = _simulatedClockUtc!.subtract(
-      const Duration(minutes: windowDurationMinutes),
-    );
-    _rollingWindow.removeWhere((p) => p.timestampUtc.isBefore(cutoffTime));
-
-    if (_rollingWindow.length > 12) _runInferenceCycle();
-  }
-
-  void _checkDisconnection() {
-    if (_lastUpdateUtc == null || _simulatedClockUtc == null) return;
-    if (_simulatedClockUtc!.difference(_lastUpdateUtc!).inMinutes > 2 &&
-        _currentState != EngineState.disconnected) {
-      _changeState(EngineState.disconnected);
-    }
-  }
-
-  void _runInferenceCycle() {
-    List<double> bpms = _rollingWindow.map((p) => p.bpm).toList();
-    double medianHR = _calculateMedian(bpms);
-    double deltaBPM = medianHR - _morningRestingHR;
-    double madHR = _calculateMedian(
-      bpms.map((bpm) => (bpm - medianHR).abs()).toList(),
-    );
-
-    double pS3 =
-        _calculateProbability(value: madHR, target: 1.5, tol: 2.0) *
-        (deltaBPM > 5 ? 1.0 : 0.5);
-    double pS1 =
-        _calculateProbability(value: madHR, target: 6.0, tol: 3.0) *
-        (deltaBPM <= 2 ? 1.0 : 0.2);
-    double pS2 = max(0.0, 1.0 - (pS3 + pS1));
-
-    double totalP = pS1 + pS2 + pS3;
-    pS1 /= totalP;
-    pS2 /= totalP;
-    pS3 /= totalP;
-
-    double deltaTime = 1.0;
-    if (_lastInferenceTimeUtc != null && _simulatedClockUtc != null) {
-      final diff = _simulatedClockUtc!
-          .difference(_lastInferenceTimeUtc!)
-          .inSeconds;
-      deltaTime = diff > 300 ? 1.0 : diff / 60.0;
-    }
-    _lastInferenceTimeUtc = _simulatedClockUtc;
-    if (deltaTime <= 0.0) return;
-
-    _currentFatigue = max(
-      0.0,
-      min(
-        capacityMax,
-        _currentFatigue +
-            ((alpha * pS3) - (beta * pS1) + (delta * pS2)) * deltaTime,
-      ),
-    );
-    _evaluateStateTransitions(pS3);
-  }
-
-  void _evaluateStateTransitions(double pS3) {
-    if (_wakeUpTimeUtc != null &&
-        _simulatedClockUtc != null &&
-        _simulatedClockUtc!.difference(_wakeUpTimeUtc!).inMinutes < 45) {
-      if (_currentState != EngineState.routine) {
-        _changeState(EngineState.routine);
-      }
-      return;
-    }
-
-    EngineState nextState = _currentState;
-    _stateStartTimeUtc ??= _simulatedClockUtc;
-    int duration = _simulatedClockUtc!
-        .difference(_stateStartTimeUtc!)
-        .inMinutes;
-
     if (_currentState == EngineState.breakMode) {
-      if (duration < 3) return;
-      if (_currentFatigue <= 0.0) {
-        _hasIncompleteRecovery = false;
-        nextState = EngineState.routine;
-      } else if (duration >= 25) {
-        _currentFatigue = capacityMax * 0.5;
-        _hasIncompleteRecovery = true;
-        nextState = EngineState.routine;
+      return _elapsedBreakSeconds;
+    }
+    return 0;
+  }
+
+  // ==========================================
+  // INITIALIZATION & LIFECYCLE
+  // ==========================================
+
+  CognitiveEngineProvider(
+    this._ticker, {
+    SimulationScenario scenario = SimulationScenario.optimalFlow,
+  }) : _scenarioSimulator = ScenarioSimulator(scenario) {
+    _internalClock = DateTime.now();
+    _wakeupTime = _internalClock.subtract(
+      const Duration(hours: 2),
+    ); // Fallback value
+    _currentDay = _internalClock.day;
+
+    // Create a safe default state before API injects real data
+    _safteState = SafteState(
+      effectiveness: 100.0,
+      reservoir: SafteEngine.maxReservoirCapacity,
+      circadianValue: 0.0,
+      timestamp: _internalClock,
+    );
+
+    // Listen to the Time Infrastructure (Real or Accelerated)
+    _tickSubscription = _ticker.tickStream.listen((_) {
+      if (_currentState == EngineState.idle) {
+        _internalClock = DateTime.now();
+        _checkMidnightRollover();
+        _updateSafteState(isFocusing: false);
+        notifyListeners();
+      } else {
+        _processTick(); // Fast cycle (e.g., every 5 seconds)
+      }
+    });
+
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+  }
+
+  /// Hot-swaps the testing scenario (Triggered via Dev Menu)
+  void updateScenario(SimulationScenario newScenario) {
+    _scenarioSimulator = ScenarioSimulator(newScenario);
+  }
+
+  /// Ingests the morning biological baseline fetched from the server
+  void initializeBaseline(DailyBaseline baseline) {
+    _wakeupTime = baseline.wakeupTime;
+    _internalClock = DateTime.now();
+
+    // Compute initial Homeostatic Reservoir based on sleep efficiency penalty
+    double initialR = SafteEngine.maxReservoirCapacity;
+    if (baseline.sleepEfficiency < 85.0) {
+      initialR = math.max(
+        0.0,
+        initialR - ((85.0 - baseline.sleepEfficiency) * 10),
+      );
+    }
+
+    _safteState = SafteEngine.computeNextState(
+      currentR: initialR,
+      wakeupTime: _wakeupTime,
+      currentTime: _internalClock,
+    );
+    notifyListeners();
+  }
+
+  // ==========================================
+  // SESSION CONTROL
+  // ==========================================
+
+  void startSession() {
+    if (_dailyWorkedSeconds >= dailyMaxSeconds) return;
+
+    _internalClock = DateTime.now();
+    _updateSafteState(isFocusing: false);
+
+    // Clinical block: Do not allow work if effectiveness is critically low
+    if (_safteState.effectiveness < _inhibitedSafteThreshold) {
+      _currentState = EngineState.inhibited;
+      notifyListeners();
+      return;
+    }
+
+    _calculateNextSegmentDuration();
+    _elapsedFocusSeconds = 0;
+    _breakExtensions = 0;
+    _isBreakRecommended = false;
+    _advisoryMessage = "Calibrating physiological baseline...";
+    _biometrics.resetSession();
+
+    _currentState = EngineState.analyzingBaseline;
+    _ticker.start(const Duration(seconds: tickDurationSeconds));
+    notifyListeners();
+  }
+
+  // ==========================================
+  // CORE ENGINE LOOP
+  // ==========================================
+
+  void _processTick() {
+    // 1. Advance the internal clock
+    _internalClock = _internalClock.add(
+      const Duration(seconds: tickDurationSeconds),
+    );
+
+    // 2. Prevent limit bypass across multiple days
+    _checkMidnightRollover();
+
+    // 3. Update SAFTE mathematics based on current effort
+    _updateSafteState(isFocusing: _currentState == EngineState.focus);
+
+    // 4. Ingest simulated biological data
+    final double hr = _scenarioSimulator.getSimulatedHR(
+      _elapsedFocusSeconds,
+      _elapsedBreakSeconds,
+      _currentState == EngineState.breakMode,
+    );
+    final int steps = _scenarioSimulator.getSimulatedSteps();
+    _biometrics.addDataPoint(hr, _elapsedFocusSeconds);
+
+    // 5. State Machine Routing
+    switch (_currentState) {
+      case EngineState.analyzingBaseline:
+        _handleAnalyzingBaseline();
+        break;
+      case EngineState.focus:
+        _handleFocusMode(steps);
+        break;
+      case EngineState.breakMode:
+        _handleBreakMode();
+        break;
+      default:
+        break;
+    }
+    notifyListeners();
+  }
+
+  // --- STATE HANDLERS ---
+
+  void _handleAnalyzingBaseline() {
+    _elapsedFocusSeconds += tickDurationSeconds;
+    if (_elapsedFocusSeconds == 180) {
+      // 3 minutes calibration
+      _biometrics.optimizeBaseline();
+      _advisoryMessage = "Flow state identified. Session active.";
+      _currentState = EngineState.focus;
+    }
+  }
+
+  void _handleFocusMode(int steps) {
+    _elapsedFocusSeconds += tickDurationSeconds;
+    _dailyWorkedSeconds += tickDurationSeconds;
+
+    // Periodically re-optimize baseline during the first 10 minutes
+    if (_elapsedFocusSeconds <= 600 && _elapsedFocusSeconds % 15 == 0) {
+      _biometrics.optimizeBaseline();
+    }
+
+    // Absolute biological limit check
+    if (_dailyWorkedSeconds >= dailyMaxSeconds) {
+      _triggerDailyLimit();
+      return;
+    }
+
+    // Advisory System Checks
+    if (!_isBreakRecommended) {
+      if (_elapsedFocusSeconds >= _targetSegmentSeconds) {
+        _isBreakRecommended = true;
+        _advisoryMessage =
+            "Optimal focus time reached. Initiate break to consolidate recovery.";
+      } else if (_biometrics.isAcuteOverload(steps)) {
+        _isBreakRecommended = true;
+        _advisoryMessage =
+            "ACUTE OVERLOAD DETECTED. Immediate interruption highly advised.";
+      }
+    }
+  }
+
+  void _handleBreakMode() {
+    _elapsedBreakSeconds += tickDurationSeconds;
+
+    if (_elapsedBreakSeconds >= _targetBreakSeconds) {
+      if (_biometrics.isRecoveryIncomplete()) {
+        _advisoryMessage = "Vagal tone altered. Break automatically extended.";
+        _isFocusRecommended = false;
+
+        if (_breakExtensions < _maxBreakExtensions) {
+          _targetBreakSeconds += _breakExtensionSeconds;
+          _breakExtensions++;
+        }
+      } else {
+        _advisoryMessage = "Vagal tone restored. Ready for Deep Focus.";
+        _isFocusRecommended = true;
       }
     } else {
-      if (_currentFatigue >= capacityMax ||
-          (_currentState == EngineState.focus && duration >= 110)) {
-        nextState = EngineState.breakMode;
-      } else {
-        nextState = pS3 > 0.6 ? EngineState.focus : EngineState.routine;
-      }
+      _advisoryMessage = "Fatigue clearance in progress...";
     }
-    if (_currentState != nextState) _changeState(nextState);
   }
 
-  void _changeState(EngineState s) {
-    _currentState = s;
-    _stateStartTimeUtc = _simulatedClockUtc;
+  // ==========================================
+  // HELPER METHODS & MANUAL TRANSITIONS
+  // ==========================================
+
+  void _updateSafteState({required bool isFocusing}) {
+    double currentR = _safteState.reservoir;
+    if (isFocusing) {
+      currentR = SafteEngine.deplete(currentR, tickDurationSeconds);
+    }
+
+    _safteState = SafteEngine.computeNextState(
+      currentR: currentR,
+      wakeupTime: _wakeupTime,
+      currentTime: _internalClock,
+    );
+  }
+
+  void _calculateNextSegmentDuration() {
+    if (_safteState.effectiveness >= _optimalSafteThreshold) {
+      _targetSegmentSeconds = _optimalSegmentMinutes * 60;
+    } else {
+      // Linear scaling between 25 and 52 minutes based on effectiveness
+      final double scaling =
+          (_safteState.effectiveness - _inhibitedSafteThreshold) /
+          _safteRangeDivisor;
+      final int calculatedMinutes =
+          (_baseSegmentMinutes + (_segmentScalingFactor * scaling)).toInt();
+
+      // Safety clamp: ensures Focus segments never drop below 15 minutes due to extreme fatigue
+      final int safeMinutes = math.max(15, calculatedMinutes);
+      _targetSegmentSeconds = safeMinutes * 60;
+    }
+  }
+
+  /// Resets daily limits if the clock passes midnight
+  void _checkMidnightRollover() {
+    if (_internalClock.day != _currentDay) {
+      _dailyWorkedSeconds = 0;
+      _currentDay = _internalClock.day;
+    }
+  }
+
+  /// Triggered by the User pressing "START BREAK"
+  void manualTransitionToBreak() {
+    final int calculatedBreakSeconds =
+        (_elapsedFocusSeconds * _breakDurationRatio).toInt();
+
+    // Safety clamp: prevents useless breaks of just a few seconds if user interrupts early
+    _targetBreakSeconds = math.max(
+      300,
+      calculatedBreakSeconds,
+    ); // Minimum 5 minutes
+
+    _elapsedBreakSeconds = 0;
+    _biometrics.window1Min.clear();
+
+    _isBreakRecommended = false;
+    _isFocusRecommended = false;
+    _advisoryMessage = "Recovery initiated.";
+    _currentState = EngineState.breakMode;
     notifyListeners();
   }
 
-  double _calculateMedian(List<double> v) {
-    if (v.isEmpty) return 0.0;
-    final s = List<double>.from(v)..sort();
-    return s.length % 2 == 1
-        ? s[s.length ~/ 2]
-        : (s[s.length ~/ 2 - 1] + s[s.length ~/ 2]) / 2;
+  /// Triggered by the User pressing "RESUME SESSION"
+  void manualTransitionToFocus() {
+    _calculateNextSegmentDuration();
+    _elapsedFocusSeconds = 0;
+    _biometrics.window10Min.clear();
+
+    _isBreakRecommended = false;
+    _isFocusRecommended = false;
+    _advisoryMessage = "Session active.";
+    _currentState = EngineState.focus;
+    notifyListeners();
   }
 
-  double _calculateProbability({
-    required double value,
-    required double target,
-    required double tol,
-  }) => max(0.0, 1.0 - ((value - target).abs() / tol));
+  void _triggerDailyLimit() {
+    _currentState = EngineState.dailyLimitReached;
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+    notifyListeners();
 
-  // --- ACTIVE LEARNING ---
-  int _fbCount = 0;
-  void submitFeedback(int rpe, int time) {
-    if (time < 1) return;
-    double fA = rpe >= 4 ? 1.0 : (rpe <= 2 ? -1.0 : 0.0);
-    double fB = rpe >= 4 ? -1.0 : (rpe <= 2 ? 1.0 : 0.0);
-    if (fA == 0 && fB == 0) {
-      _fbCount++;
-      return;
-    }
-    double lr = 0.15 * exp(-0.05 * _fbCount);
-    alpha = (alpha * (1 + lr * fA)).clamp(5.0, 40.0);
-    beta = (beta * (1 + lr * fB)).clamp(10.0, 60.0);
-    _fbCount++;
+    Future.delayed(const Duration(seconds: 2), endSession);
+  }
+
+  /// Force-stops the session and initiates routing to the Report Page
+  void endSession() {
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+    _currentState = EngineState.sessionEnded;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _tickSubscription?.cancel();
+    _ticker.dispose();
+    super.dispose();
   }
 }

@@ -2,32 +2,70 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/bio_provider.dart';
+
+import '../providers/cognitive_engine_provider.dart';
+
 import 'profile_page.dart';
 import 'focus_mode_page.dart';
 
-// --- INTERPRETE SEMANTICO (Layer di Presentazione) ---
-// Isola la UI dalla logica di dominio e dai numeri magici.
-class BioSemanticInterpreter {
-  static Color getReadinessColor(String state, ColorScheme cs) =>
-      switch (state) {
-        'optimal' => cs.primary,
-        'warning' => cs.secondary,
-        _ => cs.error,
-      };
+// ==========================================
+// SEMANTIC INTERPRETER (Presentation Layer)
+// ==========================================
+/// Translates raw SAFTE math into human-readable UI colors, labels, and states.
+class SafteSemanticInterpreter {
+  static const double optimalThreshold = 90.0;
+  static const double warningThreshold = 77.0;
 
-  static String getSleepStatus(int minutes) =>
-      minutes >= 420 ? 'Ottimale' : 'Carente';
-  static Color getSleepColor(int minutes, ColorScheme cs) =>
-      minutes >= 420 ? cs.primary : cs.error;
+  /// Determines the main theme color based on the Effectiveness score.
+  static Color getEffectivenessColor(double score, ColorScheme cs) {
+    if (score >= optimalThreshold) return cs.primary; // Teal
+    if (score >= warningThreshold) return cs.secondary; // Amber
+    return cs.error; // Rose
+  }
 
-  static String getRHRStatus(double rhr) =>
-      rhr <= 62.0 ? 'Rilassato' : 'Sotto Sforzo';
-  static Color getRHRColor(double rhr, ColorScheme cs) =>
-      rhr <= 62.0 ? cs.primary : cs.secondary;
+  /// Returns a short label for the readiness status.
+  static String getEffectivenessLabel(double score) {
+    if (score >= optimalThreshold) return 'OPTIMAL';
+    if (score >= warningThreshold) return 'BALANCED';
+    return 'COMPROMISED';
+  }
+
+  /// Returns a detailed clinical message for the Readiness Card.
+  static String getReadinessMessage(double score) {
+    if (score >= optimalThreshold) {
+      return "Your cognitive battery is fully primed. Perfect time for deep work.";
+    }
+    if (score >= warningThreshold) {
+      return "Acceptable readiness. You can focus, but expect shorter optimal segments.";
+    }
+    return "Clinical lock advised. Your biological metrics suggest severe fatigue.";
+  }
+
+  // --- COMPONENT FORMATTERS ---
+
+  static String getReservoirStatus(double ratio) {
+    if (ratio > 0.8) return 'High';
+    if (ratio > 0.4) return 'Draining';
+    return 'Depleted';
+  }
+
+  static String getCircadianStatus(double cValue) {
+    // cValue is a harmonic oscillator. Positive means peak, negative means trough.
+    if (cValue > 0.5) return 'Peak';
+    if (cValue > -0.5) return 'Stable';
+    return 'Slump';
+  }
+
+  static String getInertiaStatus(double effectiveness, double reservoirRatio) {
+    // If effectiveness is low but reservoir is high, it's likely sleep inertia.
+    if (effectiveness < 90.0 && reservoirRatio > 0.9) return 'Active';
+    return 'Cleared';
+  }
 }
 
-// --- MAIN DASHBOARD SHELL ---
+// ==========================================
+// MAIN DASHBOARD SHELL
+// ==========================================
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
 
@@ -37,8 +75,6 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> {
   int _currentIndex = 0;
-  
-  // 1. Aggiungiamo un controller per gestire lo scorrimento
   late PageController _pageController;
 
   final List<Widget> _pages = const [
@@ -49,13 +85,11 @@ class _HomeDashboardState extends State<HomeDashboard> {
   @override
   void initState() {
     super.initState();
-    // Inizializziamo il controller sulla pagina di partenza
     _pageController = PageController(initialPage: _currentIndex);
   }
 
   @override
   void dispose() {
-    // Ricordiamoci sempre di distruggere il controller per evitare memory leak!
     _pageController.dispose();
     super.dispose();
   }
@@ -63,14 +97,13 @@ class _HomeDashboardState extends State<HomeDashboard> {
   void _updateTab(int index) {
     if (_currentIndex == index) return;
     HapticFeedback.selectionClick();
-    
+
     setState(() => _currentIndex = index);
-    
-    // 2. Diciamo al controller di scivolare verso la nuova pagina
+
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300), // Velocità dello scorrimento
-      curve: Curves.easeOutCubic, // Curva morbida per un effetto premium
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -80,11 +113,10 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      // 3. Sostituiamo IndexedStack con PageView
       body: PageView(
         controller: _pageController,
-        // Impedisce all'utente di scorrere trascinando col dito (mantiene il controllo solo sulla Navigation Bar)
-        physics: const NeverScrollableScrollPhysics(), 
+        physics:
+            const NeverScrollableScrollPhysics(), // Managed strictly by NavBar
         children: _pages,
       ),
       bottomNavigationBar: NavigationBar(
@@ -109,7 +141,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
   }
 }
 
-// --- WIDGET ESTRATTI E PURIFICATI ---
+// ==========================================
+// EXTRACTED WIDGETS
+// ==========================================
 
 class _ReadinessCard extends StatelessWidget {
   const _ReadinessCard();
@@ -117,29 +151,29 @@ class _ReadinessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
 
-    final readiness = context.select((BioProvider bio) => bio.readiness);
-    // Delegazione del colore all'Interprete
-    final dynamicColor = BioSemanticInterpreter.getReadinessColor(
-      readiness.uiState,
-      colorScheme,
+    // Reactive binding to the Cognitive Engine
+    final engine = context.watch<CognitiveEngineProvider>();
+    final double score = engine.currentEffectiveness;
+
+    final dynamicColor = SafteSemanticInterpreter.getEffectivenessColor(
+      score,
+      theme.colorScheme,
     );
 
     return MergeSemantics(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         decoration: BoxDecoration(
-          color: colorScheme.surface,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(32),
           border: Border.all(
-            color: colorScheme.outlineVariant.withAlpha(25),
+            color: theme.colorScheme.outlineVariant.withAlpha(25),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: colorScheme.shadow.withAlpha(51),
+              color: theme.colorScheme.shadow.withAlpha(51),
               blurRadius: 40,
               offset: const Offset(0, 15),
             ),
@@ -150,15 +184,11 @@ class _ReadinessCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.health_and_safety_outlined,
-                  color: dynamicColor,
-                  size: 22,
-                ),
+                Icon(Icons.bolt_rounded, color: dynamicColor, size: 22),
                 const SizedBox(width: 8),
                 Text(
-                  'STATO COGNITIVO',
-                  style: textTheme.labelMedium?.copyWith(
+                  'COGNITIVE READINESS',
+                  style: theme.textTheme.labelMedium?.copyWith(
                     letterSpacing: 2.5,
                     fontWeight: FontWeight.bold,
                     color: dynamicColor,
@@ -167,14 +197,14 @@ class _ReadinessCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 32),
+
+            // Animated Circular Score
             SizedBox(
               height: 180,
               width: 180,
               child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(
-                  begin: 0.0,
-                  end: readiness.readinessScore / 100.0,
-                ),
+                // Missing 'begin' ensures smooth transitions between state updates without flashing to 0
+                tween: Tween<double>(end: score / 100.0),
                 duration: const Duration(milliseconds: 1800),
                 curve: Curves.easeOutExpo,
                 builder: (context, value, child) {
@@ -184,7 +214,7 @@ class _ReadinessCard extends StatelessWidget {
                       CircularProgressIndicator(
                         value: 1.0,
                         strokeWidth: 8,
-                        color: colorScheme.onSurface.withAlpha(13),
+                        color: theme.colorScheme.onSurface.withAlpha(13),
                       ),
                       CircularProgressIndicator(
                         value: value,
@@ -201,7 +231,7 @@ class _ReadinessCard extends StatelessWidget {
                             children: [
                               Text(
                                 '${(value * 100).toInt()}',
-                                style: textTheme.displayLarge?.copyWith(
+                                style: theme.textTheme.displayLarge?.copyWith(
                                   fontSize: 72,
                                   fontWeight: FontWeight.w200,
                                   color: Colors.white,
@@ -213,9 +243,11 @@ class _ReadinessCard extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '/100',
-                                style: textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
+                                SafteSemanticInterpreter.getEffectivenessLabel(
+                                  value * 100,
+                                ),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: dynamicColor,
                                   letterSpacing: 2.0,
                                 ),
                               ),
@@ -230,10 +262,10 @@ class _ReadinessCard extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             Text(
-              readiness.dynamicMessage,
+              SafteSemanticInterpreter.getReadinessMessage(score),
               textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
                 height: 1.5,
               ),
             ),
@@ -250,18 +282,12 @@ class _KeyFactorsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
+    final engine = context.watch<CognitiveEngineProvider>();
+    // Assume safteSnapshot is available via getter in the Provider
+    final safte = engine.safteSnapshot;
 
-    final (readiness, morningRHR) = context.select(
-      (BioProvider b) => (b.readiness, b.morningRHR),
-    );
-
-    // Sincronizzazione visiva assoluta: usa la stessa funzione della Card
-    final dynamicColor = BioSemanticInterpreter.getReadinessColor(
-      readiness.uiState,
-      colorScheme,
-    );
+    // Calculate component ratios for the UI
+    final double reservoirRatio = safte.reservoir / engine.capacityMax;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,48 +295,53 @@ class _KeyFactorsSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Text(
-            'FATTORI CHIAVE',
-            style: textTheme.labelSmall?.copyWith(
+            'SAFTE COMPONENTS',
+            style: theme.textTheme.labelSmall?.copyWith(
               letterSpacing: 1.5,
-              color: colorScheme.onSurfaceVariant,
+              color: theme.colorScheme.onSurfaceVariant,
               fontWeight: FontWeight.bold,
             ),
           ),
         ),
         const SizedBox(height: 12),
+
+        // 1. Homeostatic Reservoir (R)
         _ContributorTile(
-          icon: Icons.bedtime_rounded,
-          title: 'Recupero Notturno',
-          description:
-              '${readiness.totalSleepMinutes ~/ 60}h ${readiness.totalSleepMinutes % 60}m registrati.',
-          statusLabel: BioSemanticInterpreter.getSleepStatus(
-            readiness.totalSleepMinutes,
+          icon: Icons.battery_charging_full_rounded,
+          title: 'Homeostatic Reservoir',
+          description: 'Current cognitive battery capacity.',
+          statusLabel: SafteSemanticInterpreter.getReservoirStatus(
+            reservoirRatio,
           ),
-          statusColor: BioSemanticInterpreter.getSleepColor(
-            readiness.totalSleepMinutes,
-            colorScheme,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _ContributorTile(
-          icon: Icons.favorite_rounded,
-          title: 'Tensione Nervosa',
-          description: 'Frequenza a riposo: ${morningRHR.toInt()} bpm.',
-          statusLabel: BioSemanticInterpreter.getRHRStatus(morningRHR),
-          statusColor: BioSemanticInterpreter.getRHRColor(
-            morningRHR,
-            colorScheme,
+          statusColor: SafteSemanticInterpreter.getEffectivenessColor(
+            reservoirRatio * 100,
+            theme.colorScheme,
           ),
         ),
         const SizedBox(height: 8),
+
+        // 2. Circadian Rhythm (C)
         _ContributorTile(
-          icon: Icons.psychology_rounded,
-          title: 'Capacità Cognitiva',
-          description: 'Basato sulla tua variabilità cardiaca (HRV).',
-          statusLabel: readiness.uiState == 'optimal'
-              ? 'Ottimale'
-              : 'Bilanciata',
-          statusColor: dynamicColor,
+          icon: Icons.waves_rounded,
+          title: 'Circadian Rhythm',
+          description: 'Hormonal alignment with time of day.',
+          statusLabel: SafteSemanticInterpreter.getCircadianStatus(
+            safte.circadianValue,
+          ),
+          statusColor: theme.colorScheme.tertiary,
+        ),
+        const SizedBox(height: 8),
+
+        // 3. Sleep Inertia (I)
+        _ContributorTile(
+          icon: Icons.snooze_rounded,
+          title: 'Sleep Inertia',
+          description: 'Post-awakening cognitive penalty.',
+          statusLabel: SafteSemanticInterpreter.getInertiaStatus(
+            safte.effectiveness,
+            reservoirRatio,
+          ),
+          statusColor: theme.colorScheme.secondary,
         ),
       ],
     );
@@ -335,15 +366,15 @@ class _ContributorTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant.withAlpha(25)),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withAlpha(25),
+        ),
       ),
       child: Row(
         children: [
@@ -362,16 +393,16 @@ class _ContributorTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.onSurface,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -387,7 +418,7 @@ class _ContributorTile extends StatelessWidget {
             ),
             child: Text(
               statusLabel.toUpperCase(),
-              style: textTheme.labelSmall?.copyWith(
+              style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.5,
                 color: statusColor,
@@ -406,7 +437,13 @@ class _FloatingStartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final engine = context.watch<CognitiveEngineProvider>();
+
+    // Clinical check: is the user energized enough to start?
+    final bool isEngineReady =
+        engine.currentEffectiveness >=
+        SafteSemanticInterpreter.warningThreshold;
 
     return Positioned(
       bottom: 0,
@@ -418,9 +455,9 @@ class _FloatingStartButton extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              colorScheme.surface.withAlpha(0),
-              colorScheme.surface.withAlpha(180),
-              colorScheme.surface,
+              theme.colorScheme.surface.withAlpha(0),
+              theme.colorScheme.surface.withAlpha(180),
+              theme.colorScheme.surface,
             ],
             stops: const [0.0, 0.4, 1.0],
           ),
@@ -432,35 +469,48 @@ class _FloatingStartButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
-                BoxShadow(
-                  color: colorScheme.primary.withAlpha(51),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
+                if (isEngineReady)
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withAlpha(51),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
               ],
             ),
             child: FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.primary,
-                foregroundColor: colorScheme.onPrimary,
+                backgroundColor: isEngineReady
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest,
+                foregroundColor: isEngineReady
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurfaceVariant,
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
-              onPressed: () {
-                HapticFeedback.heavyImpact();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const FocusModePage()),
-                );
-              },
+              onPressed: isEngineReady
+                  ? () {
+                      HapticFeedback.heavyImpact();
+
+                      // Initiates the cognitive engine state machine
+                      context.read<CognitiveEngineProvider>().startSession();
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const FocusModePage(),
+                        ),
+                      );
+                    }
+                  : null,
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(Icons.power_settings_new_rounded),
                   SizedBox(width: 12),
                   Text(
-                    'AVVIA SESSIONE',
+                    'START SESSION',
                     style: TextStyle(
                       letterSpacing: 2.0,
                       fontWeight: FontWeight.bold,
@@ -521,7 +571,7 @@ class _PremiumSliverAppBar extends StatelessWidget {
       actions: [
         IconButton(
           icon: Icon(actionIcon),
-          tooltip: 'Azione',
+          tooltip: 'Profile',
           onPressed: onActionTap,
         ),
         const SizedBox(width: 8),
@@ -530,7 +580,10 @@ class _PremiumSliverAppBar extends StatelessWidget {
   }
 }
 
-// --- TAB 1: HOME ---
+// ==========================================
+// TABS
+// ==========================================
+
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
@@ -549,9 +602,9 @@ class HomeTab extends StatelessWidget {
               actionIcon: Icons.person_outline_rounded,
               onActionTap: () {
                 HapticFeedback.lightImpact();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ProfilePage()),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProfilePage()));
               },
             ),
             SliverPadding(
@@ -572,14 +625,12 @@ class HomeTab extends StatelessWidget {
   }
 }
 
-// --- TAB 2: ANALYTICS (PLACEHOLDER) ---
 class AnalyticsTab extends StatelessWidget {
   const AnalyticsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return CustomScrollView(
       primary: false,
@@ -601,13 +652,13 @@ class AnalyticsTab extends StatelessWidget {
                 Icon(
                   Icons.auto_graph_rounded,
                   size: 64,
-                  color: colorScheme.primary.withAlpha(127),
+                  color: theme.colorScheme.primary.withAlpha(127),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Dati in elaborazione',
+                  'Data processing...',
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
