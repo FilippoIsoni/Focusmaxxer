@@ -4,9 +4,24 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../widgets/biometric_ring.dart';
 import '../providers/cognitive_engine_provider.dart';
+import 'session_report.dart'; // <-- IMPORTANTE: Aggiunto l'import della nuova pagina
 
-class FocusModePage extends StatelessWidget {
+class FocusModePage extends StatefulWidget {
   const FocusModePage({super.key});
+
+  @override
+  State<FocusModePage> createState() => _FocusModePageState();
+}
+
+class _FocusModePageState extends State<FocusModePage> {
+  late DateTime _sessionStartTime;
+
+  @override
+  void initState() {
+    super.initState();
+    // Memorizziamo l'ora esatta in cui l'utente avvia la sessione
+    _sessionStartTime = DateTime.now();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +50,18 @@ class FocusModePage extends StatelessWidget {
                   const SizedBox(height: 56),
 
                   // 2. TIMER ISOLATO (Non innesca rebuild dell'intera pagina)
-                  _SessionTimerDisplay(currentState: engine.currentState),
+                  GestureDetector(
+                    onDoubleTap: () {
+                      // TODO: Questo è solo un trick per testare la Break Mode.
+                      // Da rimuovere quando collegheremo il simulatore dati.
+                      Navigator.of(
+                        context,
+                      ).pushNamed('/break'); // Placeholder rapido
+                    },
+                    child: _SessionTimerDisplay(
+                      currentState: engine.currentState,
+                    ),
+                  ),
 
                   // 3. ALERT DI PENALITÀ FISIOLOGICA
                   if (engine.hasIncompleteRecovery) ...[
@@ -67,7 +93,7 @@ class FocusModePage extends StatelessWidget {
               ),
             ),
 
-            // 4. PULSANTE DI USCITA SICURA
+            // 4. PULSANTE DI USCITA SICURA (Corretto)
             Positioned(
               bottom: 40,
               left: 0,
@@ -76,7 +102,18 @@ class FocusModePage extends StatelessWidget {
                 child: GestureDetector(
                   onLongPress: () {
                     HapticFeedback.heavyImpact();
-                    Navigator.of(context).pop();
+
+                    // Calcoliamo la durata basandoci sull'avvio della pagina
+                    final elapsed = DateTime.now().difference(
+                      _sessionStartTime,
+                    );
+
+                    // Navighiamo verso il Session Report
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) => SessionReportPage(duration: elapsed),
+                      ),
+                    );
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -119,12 +156,12 @@ class _SessionTimerDisplay extends StatefulWidget {
 
 class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
   late Timer _timer;
-  late DateTime _startTime;
+  late DateTime _stateStartTime;
 
   @override
   void initState() {
     super.initState();
-    _startTime = DateTime.now();
+    _stateStartTime = DateTime.now();
     // Il Timer ora invoca setState solo su questo specifico frammento di testo
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -136,7 +173,7 @@ class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
     super.didUpdateWidget(oldWidget);
     // Logica di stato sicura: resetta il cronometro se il motore cambia fase
     if (oldWidget.currentState != widget.currentState) {
-      _startTime = DateTime.now();
+      _stateStartTime = DateTime.now();
     }
   }
 
@@ -165,13 +202,13 @@ class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
         style: TextStyle(
           fontSize: 64,
           fontWeight: FontWeight.w200,
-          fontFamily: 'Courier', // Font monospazio essenziale per i timer
+          fontFamily: 'Courier',
           color: Colors.white54,
         ),
       );
     }
 
-    final elapsed = DateTime.now().difference(_startTime);
+    final elapsed = DateTime.now().difference(_stateStartTime);
     return Text(
       _formatDuration(elapsed),
       style: const TextStyle(
@@ -179,9 +216,7 @@ class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
         fontWeight: FontWeight.w200,
         fontFamily: 'Courier',
         color: Colors.white,
-        fontFeatures: [
-          FontFeature.tabularFigures(),
-        ], // Previene il jittering dei numeri
+        fontFeatures: [FontFeature.tabularFigures()],
       ),
     );
   }
