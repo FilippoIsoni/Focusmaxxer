@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -36,7 +35,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _saveProfile() {
     FocusScope.of(context).unfocus();
     HapticFeedback.lightImpact();
-    
+
     context.read<AuthProvider>().updateProfile(
       _nameController.text,
       _surnameController.text,
@@ -44,7 +43,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
-     SnackBar(
+      SnackBar(
         content: const Text('Profile saved successfully'),
         behavior: SnackBarBehavior.floating,
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -83,11 +82,15 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // --- HELPER DECORAZIONE AGGIORNATO ---
-  InputDecoration _customInputDecoration(String label, IconData icon, ColorScheme colorScheme) {
+  InputDecoration _customInputDecoration(
+    String label,
+    IconData icon,
+    ColorScheme colorScheme,
+  ) {
     return InputDecoration(
       labelText: label,
       // Ingrandito il testo della label
-      labelStyle: const TextStyle(fontSize: 16), 
+      labelStyle: const TextStyle(fontSize: 16),
       // Ingrandita l'icona e aggiunto un po' di spazio laterale per farla respirare
       prefixIcon: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -99,7 +102,9 @@ class _ProfilePageState extends State<ProfilePage> {
       // Aumentato il padding interno verticale (20) e orizzontale (20)
       contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16), // Bordi leggermente più morbidi
+        borderRadius: BorderRadius.circular(
+          16,
+        ), // Bordi leggermente più morbidi
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
@@ -120,10 +125,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
@@ -131,7 +133,12 @@ class _ProfilePageState extends State<ProfilePage> {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 8.0, bottom: 24.0),
+                padding: const EdgeInsets.only(
+                  left: 24.0,
+                  right: 24.0,
+                  top: 8.0,
+                  bottom: 24.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -167,7 +174,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     // --- TITOLO E DESCRIZIONE ---
                     const Text(
                       'Profile',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 32),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 32,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -178,33 +188,55 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    
+
                     // --- CAMPI DI TESTO AGGIORNATI ---
                     TextFormField(
                       controller: _nicknameController,
                       textInputAction: TextInputAction.next,
                       // Font size aumentato a 18 per il testo digitato
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      decoration: _customInputDecoration('Nickname', Icons.alternate_email_rounded, colorScheme),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: _customInputDecoration(
+                        'Nickname',
+                        Icons.alternate_email_rounded,
+                        colorScheme,
+                      ),
                     ),
                     const SizedBox(height: 16), // Spaziatura aumentata
 
                     TextFormField(
                       controller: _nameController,
                       textInputAction: TextInputAction.next,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      decoration: _customInputDecoration('Name', Icons.person_outline_rounded, colorScheme),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: _customInputDecoration(
+                        'Name',
+                        Icons.person_outline_rounded,
+                        colorScheme,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     TextFormField(
                       controller: _surnameController,
                       textInputAction: TextInputAction.done,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      decoration: _customInputDecoration('Surname', Icons.fingerprint_outlined, colorScheme),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: _customInputDecoration(
+                        'Surname',
+                        Icons.fingerprint_outlined,
+                        colorScheme,
+                      ),
                     ),
-                    const SizedBox(height: 24), // Spaziatura aumentata prima del bottone
-                    
+                    const SizedBox(
+                      height: 24,
+                    ), // Spaziatura aumentata prima del bottone
                     // Pulsante Salva (ingrandito in altezza a 56)
                     SizedBox(
                       width: double.infinity,
@@ -212,14 +244,23 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: FilledButton(
                         onPressed: _saveProfile,
                         style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Border radius coordinato coi textfield
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ), // Border radius coordinato coi textfield
                         ),
-                        child: const Text('SAVE CHANGES', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.0, fontSize: 16)),
+                        child: const Text(
+                          'SAVE CHANGES',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                     ),
 
-                     // Ho ridotto il SizedBox fisso per lasciare che il layout si adatti meglio
-                     // se i campi sopra sono più grandi
+                    // Ho ridotto il SizedBox fisso per lasciare che il layout si adatti meglio
+                    // se i campi sopra sono più grandi
                     const SizedBox(height: 48),
 
                     // --- PRIVACY & DATA SECTION (Fondo Schermo) ---
@@ -229,11 +270,22 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: colorScheme.error,
-                          side: BorderSide(color: colorScheme.error.withAlpha(80), width: 1.5),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          side: BorderSide(
+                            color: colorScheme.error.withAlpha(80),
+                            width: 1.5,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         icon: const Icon(Icons.person_remove_rounded, size: 22),
-                        label: const Text('DELETE PERSONAL DATA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        label: const Text(
+                          'DELETE PERSONAL DATA',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                         onPressed: _clearPersonalData,
                       ),
                     ),
@@ -246,10 +298,18 @@ class _ProfilePageState extends State<ProfilePage> {
                         style: FilledButton.styleFrom(
                           backgroundColor: colorScheme.errorContainer,
                           foregroundColor: colorScheme.onErrorContainer,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         icon: const Icon(Icons.logout_rounded, size: 22),
-                        label: const Text('DISCONNECT FROM IMPACT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        label: const Text(
+                          'DISCONNECT FROM IMPACT',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
                         onPressed: () => _handleLogout(context),
                       ),
                     ),

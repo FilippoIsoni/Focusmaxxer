@@ -1,8 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import 'home_dashboard.dart';
-import '../main.dart'; // Importiamo il main per accedere al ClinicalBootloader
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,59 +13,58 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _isLoading = false;
+
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  @override // 1. Pulizia dei Controller per evitare memory leak
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
- Future<void> _handleLogin() async {
+  Future<void> _handleLogin() async {
+    // 1. Dismiss keyboard immediately
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
 
     try {
-      // 1. Aspettiamo che il Provider scriva su disco e dia l'OK
+      // 2. Await the Provider authentication
       await context.read<AuthProvider>().login(
         _emailController.text,
         _passwordController.text,
       );
-      
-      // 2. Controllo di sicurezza standard di Flutter
-      if (!mounted) return;
-      
-      // 3. NAVIGAZIONE MANUALE CON PUSH: 
-      // Manteniamo la LoginPage sullo stack e andiamo al Bootloader 
-      // per ricalibrare i dati biometrici prima di accedere alla Dashboard.
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const ClinicalBootloader()),
-      );
+
+      // CRITICAL FIX: No manual Navigator.push() here!
+      // The Consumer<AuthProvider> in main.dart automatically detects the state change
+      // and silently replaces this page with the ClinicalBootloader.
+      // We just let the widget die gracefully.
     } catch (e) {
-      // Se la password è "admin/123", questo blocco scatta.
       if (!mounted) return;
-      
-      // Spegniamo l'icona di caricamento per fargli riprovare
+
+      // Reset loading state to allow retry
       setState(() => _isLoading = false);
 
+      final theme = Theme.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.error_outline, color: Colors.white),
+              Icon(Icons.error_outline, color: theme.colorScheme.onError),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Invalid credentials. Please try again.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.white),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onError,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: theme.colorScheme.error,
         ),
       );
     }
@@ -74,159 +72,201 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.opaque,
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0.0, end: 1.0),
-                duration: const Duration(milliseconds: 800),
-                curve: Curves.easeOutCubic,
-                builder: (context, opacity, child) {
-                  return Opacity(
-                    opacity: opacity,
-                    child: Transform.translate(
-                      offset: Offset(0, 20 * (1 - opacity)),
-                      child: child,
-                    ),
-                  );
-                },
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            colorScheme.primary.withAlpha(51),
-                            colorScheme.primary.withAlpha(0),
-                          ],
-                          radius: 0.8,
+        child: Stack(
+          children: [
+            // --- AMBIENT GLOW BACKGROUND ---
+            // Replicates the premium cinematic lighting from the Onboarding page
+            Positioned(
+              top: 100,
+              left: MediaQuery.of(context).size.width / 2 - 150,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colorScheme.primary.withAlpha(25),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 80, sigmaY: 80),
+                child: const SizedBox(),
+              ),
+            ),
+
+            // --- FOREGROUND CONTENT ---
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, opacity, child) {
+                      return Opacity(
+                        opacity: opacity,
+                        child: Transform.translate(
+                          offset: Offset(0, 20 * (1 - opacity)),
+                          child: child,
                         ),
-                      ),
-                      child: Icon(
-                        Icons.fingerprint_rounded,
-                        size: 80,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'FOCUSMAXXER',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(
+                      );
+                    },
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // --- FINGERPRINT ICON ---
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: colorScheme.primary.withAlpha(51),
+                              width: 1,
+                            ),
+                            color: colorScheme.surface.withAlpha(150),
+                          ),
+                          child: Icon(
+                            Icons.fingerprint_rounded,
+                            size: 64,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // --- BRANDING ---
+                        Text(
+                          'FOCUSMAXXER',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w900,
                             letterSpacing: 3.0,
                             color: Colors.white,
                           ),
-                    ),
-                    const SizedBox(height: 60),
-
-                    TextFormField(
-                      controller: _emailController,
-                      textInputAction: TextInputAction.next,
-                      keyboardType: TextInputType.emailAddress,
-                      enabled: !_isLoading,
-                      decoration: const InputDecoration(
-                        labelText: 'Email or Username',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _handleLogin(),
-                      enabled: !_isLoading,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 60),
 
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _isLoading ? null : () {},
-                        child: Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withAlpha(179),
+                        // --- INPUT FIELDS ---
+                        TextFormField(
+                          controller: _emailController,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: TextInputType.emailAddress,
+                          enabled: !_isLoading,
+                          decoration: const InputDecoration(
+                            labelText: 'Username or Email',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
+                        const SizedBox(height: 24),
 
-                    SizedBox(
-                      height: 56,
-                      child: FilledButton(
-                        onPressed: _isLoading ? null : _handleLogin,
-                        child: _isLoading
-                            ? SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: colorScheme.onPrimary,
-                                ),
-                              )
-                            : const Text('LOGIN'),
-                      ),
-                    ),
-                    const SizedBox(height: 40),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'New user? ',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withAlpha(179),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: _isLoading ? null : () {},
-                          child: Text(
-                            'Register now',
-                            style: TextStyle(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.bold,
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _handleLogin(),
+                          enabled: !_isLoading,
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+
+                        // --- FORGOT PASSWORD ---
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _isLoading ? null : () {},
+                            child: Text(
+                              'Forgot Password?',
+                              style: TextStyle(
+                                color: colorScheme.onSurface.withAlpha(179),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // --- SUBMIT BUTTON ---
+                        SizedBox(
+                          height: 56,
+                          child: FilledButton(
+                            onPressed: _isLoading ? null : _handleLogin,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: colorScheme.onPrimary,
+                            ),
+                            child: _isLoading
+                                ? SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: colorScheme.onPrimary,
+                                    ),
+                                  )
+                                : const Text(
+                                    'LOGIN',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+
+                        // --- REGISTRATION LINK ---
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'New user? ',
+                              style: TextStyle(
+                                color: colorScheme.onSurface.withAlpha(179),
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _isLoading ? null : () {},
+                              child: Text(
+                                'Register now',
+                                style: TextStyle(
+                                  color: colorScheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

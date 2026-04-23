@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/cognitive_engine_provider.dart';
-import '../providers/auth_provider.dart'; 
+import '../providers/auth_provider.dart';
 
 import 'profile_page.dart';
 import 'focus_mode_page.dart';
@@ -17,9 +17,9 @@ class SafteSemanticInterpreter {
   static const double warningThreshold = 77.0;
 
   static Color getEffectivenessColor(double score, ColorScheme cs) {
-    if (score >= optimalThreshold) return cs.primary; 
-    if (score >= warningThreshold) return cs.secondary; 
-    return cs.error; 
+    if (score >= optimalThreshold) return cs.primary;
+    if (score >= warningThreshold) return cs.secondary;
+    return cs.error;
   }
 
   static String getEffectivenessLabel(double score) {
@@ -33,7 +33,7 @@ class SafteSemanticInterpreter {
       return "Your cognitive battery is fully primed. Perfect time for deep work.";
     }
     if (score >= warningThreshold) {
-      return "Acceptable readiness. You can focus, but expect shorter optimal segments.";
+      return "Acceptable readiness. You can focus, but expect shorter segments.";
     }
     return "Clinical lock advised. Your biological metrics suggest severe fatigue.";
   }
@@ -54,6 +54,33 @@ class SafteSemanticInterpreter {
     if (effectiveness < 90.0 && reservoirRatio > 0.9) return 'Active';
     return 'Cleared';
   }
+}
+
+// ==========================================
+// CUSTOM NAVIGATION TRANSITIONS
+// ==========================================
+class PremiumPageRoute extends PageRouteBuilder {
+  final Widget page;
+  PremiumPageRoute({required this.page})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          var curve = Curves.easeInOutCubic;
+          var curveTween = CurveTween(curve: curve);
+
+          return FadeTransition(
+            opacity: animation.drive(curveTween),
+            child: ScaleTransition(
+              scale: animation.drive(
+                Tween<double>(begin: 0.97, end: 1.0).chain(curveTween),
+              ),
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 600),
+        reverseTransitionDuration: const Duration(milliseconds: 400),
+      );
 }
 
 // ==========================================
@@ -95,7 +122,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 400),
       curve: Curves.easeOutCubic,
     );
   }
@@ -106,14 +133,42 @@ class _HomeDashboardState extends State<HomeDashboard> {
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(), 
-        children: _pages,
+      body: Stack(
+        children: [
+          // --- AMBIENT GLOW SYSTEM (GPU OTTIMIZZATA) ---
+          // Il RadialGradient crea una sfumatura perfetta senza usare il BoxShadow.
+          // Non entra MAI in conflitto visivo con la AppBar di vetro.
+          Positioned(
+            top: -150,
+            right: -100,
+            child: Container(
+              width: 500,
+              height: 500,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    theme.colorScheme.primary.withAlpha(45), // Centro luminoso
+                    theme.colorScheme.primary.withAlpha(0), // Sfuma nel nulla
+                  ],
+                  stops: const [0.2, 1.0],
+                ),
+              ),
+            ),
+          ),
+
+          PageView(
+            controller: _pageController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: _pages,
+          ),
+        ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         backgroundColor: theme.colorScheme.surface,
+        elevation: 8,
+        shadowColor: Colors.black,
         indicatorColor: theme.colorScheme.primary.withAlpha(38),
         onDestinationSelected: _updateTab,
         destinations: const [
@@ -134,7 +189,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
 }
 
 // ==========================================
-// EXTRACTED WIDGETS
+// REFINED COMPONENTS
 // ==========================================
 
 class _ReadinessCard extends StatelessWidget {
@@ -151,113 +206,109 @@ class _ReadinessCard extends StatelessWidget {
       theme.colorScheme,
     );
 
-    return MergeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withAlpha(25),
-            width: 1,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+          70,
+        ), // Effetto vetro migliorato
+        borderRadius: BorderRadius.circular(36),
+        border: Border.all(
+          color: Colors.white.withAlpha(
+            15,
+          ), // Bordo superiore "illuminato" stile iOS
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(40),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withAlpha(51),
-              blurRadius: 40,
-              offset: const Offset(0, 15),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bolt_rounded, color: dynamicColor, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'COGNITIVE READINESS',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    letterSpacing: 2.5,
-                    fontWeight: FontWeight.bold,
-                    color: dynamicColor,
-                  ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.bolt_rounded, color: dynamicColor, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'COGNITIVE READINESS',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  letterSpacing: 2.5,
+                  fontWeight: FontWeight.bold,
+                  color: dynamicColor,
                 ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 180,
-              width: 180,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(end: score / 100.0),
-                duration: const Duration(milliseconds: 1800),
-                curve: Curves.easeOutExpo,
-                builder: (context, value, child) {
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CircularProgressIndicator(
-                        value: 1.0,
-                        strokeWidth: 8,
-                        color: theme.colorScheme.onSurface.withAlpha(13),
-                      ),
-                      CircularProgressIndicator(
-                        value: value,
-                        strokeWidth: 8,
-                        backgroundColor: Colors.transparent,
-                        color: dynamicColor,
-                        strokeCap: StrokeCap.round,
-                      ),
-                      Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${(value * 100).toInt()}',
-                                style: theme.textTheme.displayLarge?.copyWith(
-                                  fontSize: 72,
-                                  fontWeight: FontWeight.w200,
-                                  color: Colors.white,
-                                  height: 1.0,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                SafteSemanticInterpreter.getEffectivenessLabel(
-                                  value * 100,
-                                ),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: dynamicColor,
-                                  letterSpacing: 2.0,
-                                ),
-                              ),
-                            ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 40),
+          SizedBox(
+            height: 190,
+            width: 190,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: score / 100.0),
+              duration: const Duration(milliseconds: 1800),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: 1.0,
+                      strokeWidth: 8,
+                      color: theme.colorScheme.onSurface.withAlpha(15),
+                    ),
+                    CircularProgressIndicator(
+                      value: value,
+                      strokeWidth: 8,
+                      backgroundColor: Colors.transparent,
+                      color: dynamicColor,
+                      strokeCap: StrokeCap.round,
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${(value * 100).toInt()}',
+                            style: theme.textTheme.displayLarge?.copyWith(
+                              fontSize: 72,
+                              fontWeight: FontWeight.w200,
+                              color: Colors.white,
+                              height: 1.0,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 4),
+                          Text(
+                            SafteSemanticInterpreter.getEffectivenessLabel(
+                              value * 100,
+                            ),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: dynamicColor,
+                              letterSpacing: 2.0,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 32),
-            Text(
-              SafteSemanticInterpreter.getReadinessMessage(score),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
+          ),
+          const SizedBox(height: 40),
+          Text(
+            SafteSemanticInterpreter.getReadinessMessage(score),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.5,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -288,7 +339,7 @@ class _KeyFactorsSection extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         _ContributorTile(
           icon: Icons.battery_charging_full_rounded,
           title: 'Homeostatic Reservoir',
@@ -301,7 +352,7 @@ class _KeyFactorsSection extends StatelessWidget {
             theme.colorScheme,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         _ContributorTile(
           icon: Icons.waves_rounded,
           title: 'Circadian Rhythm',
@@ -311,7 +362,7 @@ class _KeyFactorsSection extends StatelessWidget {
           ),
           statusColor: theme.colorScheme.tertiary,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         _ContributorTile(
           icon: Icons.snooze_rounded,
           title: 'Sleep Inertia',
@@ -349,21 +400,19 @@ class _ContributorTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withAlpha(25),
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withAlpha(10), width: 1.0),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: statusColor.withAlpha(25),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: statusColor, size: 20),
+            child: Icon(icon, color: statusColor, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -374,7 +423,7 @@ class _ContributorTile extends StatelessWidget {
                   title,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -389,17 +438,16 @@ class _ContributorTile extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: statusColor.withAlpha(25),
+              color: statusColor.withAlpha(20),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: statusColor.withAlpha(51)),
+              border: Border.all(color: statusColor.withAlpha(40)),
             ),
             child: Text(
               statusLabel.toUpperCase(),
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
                 color: statusColor,
                 fontSize: 9,
               ),
@@ -434,67 +482,50 @@ class _FloatingStartButton extends StatelessWidget {
             end: Alignment.bottomCenter,
             colors: [
               theme.colorScheme.surface.withAlpha(0),
-              theme.colorScheme.surface.withAlpha(180),
+              theme.colorScheme.surface.withAlpha(240),
               theme.colorScheme.surface,
             ],
             stops: const [0.0, 0.4, 1.0],
           ),
         ),
         padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-        child: SafeArea(
-          top: false,
-          child: Container(
-            decoration: BoxDecoration(
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: isEngineReady
+                ? theme.colorScheme.primary
+                : theme.colorScheme.surfaceContainerHighest,
+            foregroundColor: isEngineReady
+                ? theme.colorScheme.onPrimary
+                : theme.colorScheme.onSurfaceVariant,
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                if (isEngineReady)
-                  BoxShadow(
-                    color: theme.colorScheme.primary.withAlpha(51),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-              ],
             ),
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: isEngineReady
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surfaceContainerHighest,
-                foregroundColor: isEngineReady
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurfaceVariant,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+            elevation: isEngineReady ? 8 : 0,
+            shadowColor: theme.colorScheme.primary.withAlpha(100),
+          ),
+          onPressed: isEngineReady
+              ? () {
+                  HapticFeedback.heavyImpact();
+                  engine.startSession();
+                  Navigator.of(
+                    context,
+                  ).push(PremiumPageRoute(page: const FocusModePage()));
+                }
+              : null,
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.power_settings_new_rounded),
+              SizedBox(width: 12),
+              Text(
+                'START SESSION',
+                style: TextStyle(
+                  letterSpacing: 2.0,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              onPressed: isEngineReady
-                  ? () {
-                      HapticFeedback.heavyImpact();
-                      context.read<CognitiveEngineProvider>().startSession();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const FocusModePage(),
-                        ),
-                      );
-                    }
-                  : null,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.power_settings_new_rounded),
-                  SizedBox(width: 12),
-                  Text(
-                    'START SESSION',
-                    style: TextStyle(
-                      letterSpacing: 2.0,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
         ),
       ),
@@ -502,10 +533,9 @@ class _FloatingStartButton extends StatelessWidget {
   }
 }
 
-// L'app bar fusa e corretta: accetta titolo e sottotitolo opzionale
 class _PremiumSliverAppBar extends StatelessWidget {
   final String title;
-  final String? subtitle; // Parametro opzionale per il saluto
+  final String? subtitle;
   final IconData actionIcon;
   final VoidCallback onActionTap;
 
@@ -523,8 +553,17 @@ class _PremiumSliverAppBar extends StatelessWidget {
     return SliverAppBar(
       pinned: true,
       stretch: true,
-      expandedHeight: 140.0,
-      backgroundColor: Colors.transparent,
+      expandedHeight: 160.0,
+
+      // 1. LA SOLUZIONE ALLO SCHIACCIAMENTO:
+      // Aumentiamo l'altezza minima dell'AppBar quando è collassata in alto.
+      // In questo modo le due righe di testo avranno sempre spazio a sufficienza
+      // senza mai invadere la zona dell'orologio di sistema.
+      toolbarHeight: 76.0,
+
+      // 2. TINTA VETRO SMERIGLIATO OTTIMIZZATA
+      backgroundColor: colorScheme.surface.withAlpha(160),
+
       flexibleSpace: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
@@ -533,6 +572,7 @@ class _PremiumSliverAppBar extends StatelessWidget {
               StretchMode.zoomBackground,
               StretchMode.fadeTitle,
             ],
+            // Sistemato il padding per bilanciare la nuova altezza
             titlePadding: const EdgeInsets.only(left: 24.0, bottom: 16.0),
             centerTitle: false,
             title: Column(
@@ -542,32 +582,41 @@ class _PremiumSliverAppBar extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w900,
                     letterSpacing: 1.0,
                   ),
                 ),
-                if (subtitle != null) // Disegna il sottotitolo solo se esiste
+                if (subtitle != null)
                   Text(
                     subtitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 12, 
-                      fontWeight: FontWeight.w500,
-                      color: colorScheme.primary, 
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.primary,
                     ),
                   ),
               ],
             ),
-            background: Container(color: colorScheme.surface.withAlpha(180)),
+            // Lasciamo il background vuoto per far lavorare solo il backgroundColor + Blur
+            background: const SizedBox(),
           ),
         ),
       ),
       actions: [
-        IconButton(
-          icon: Icon(actionIcon),
-          tooltip: 'Profile',
-          onPressed: onActionTap,
+        Container(
+          margin: const EdgeInsets.only(right: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(20),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(actionIcon, size: 20, color: Colors.white),
+            tooltip: 'Profile',
+            onPressed: onActionTap,
+          ),
         ),
-        const SizedBox(width: 8),
       ],
     );
   }
@@ -587,28 +636,27 @@ class HomeTab extends StatelessWidget {
         return Stack(
           children: [
             CustomScrollView(
-              primary: false,
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               slivers: [
                 _PremiumSliverAppBar(
-                  title: 'FocusMaxxer', // Il titolo fisso
-                  subtitle: 'Hi, ${auth.nickname}', // Il saluto dinamico
+                  title: 'FocusMaxxer',
+                  subtitle: 'Hi, ${auth.nickname}',
                   actionIcon: Icons.person_outline_rounded,
                   onActionTap: () {
                     HapticFeedback.lightImpact();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const ProfilePage())
-                    );
+                    Navigator.of(
+                      context,
+                    ).push(PremiumPageRoute(page: const ProfilePage()));
                   },
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 140),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const _ReadinessCard(),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 40),
                       const _KeyFactorsSection(),
                     ]),
                   ),
@@ -631,13 +679,12 @@ class AnalyticsTab extends StatelessWidget {
     final theme = Theme.of(context);
 
     return CustomScrollView(
-      primary: false,
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
       slivers: [
         _PremiumSliverAppBar(
-          title: 'Analytics', // Solo il titolo, niente sottotitolo qui
+          title: 'Analytics',
           actionIcon: Icons.filter_list_rounded,
           onActionTap: () => HapticFeedback.lightImpact(),
         ),
@@ -647,15 +694,22 @@ class AnalyticsTab extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.auto_graph_rounded,
-                  size: 64,
-                  color: theme.colorScheme.primary.withAlpha(127),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withAlpha(20),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.auto_graph_rounded,
+                    size: 48,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Text(
                   'Data processing...',
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
