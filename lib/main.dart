@@ -12,24 +12,8 @@ import 'screens/onboarding_page.dart';
 import 'screens/login_page.dart';
 import 'screens/home_dashboard.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
-/*
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const FocusMaxxerApp());
-}
-*/
-void main() async {
-  // Assicura l'inizializzazione del framework prima di usare chiamate asincrone
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // --- INIZIO TRUCCO DI DEBUG ---
-  // Svuota completamente le SharedPreferences ad ogni avvio.
-  // In questo modo, l'app crederà sempre di essere stata appena installata.
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.clear();
-  // --- FINE TRUCCO DI DEBUG ---
   runApp(const FocusMaxxerApp());
 }
 
