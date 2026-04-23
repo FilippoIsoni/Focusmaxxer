@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'home_dashboard.dart';
+import '../main.dart'; // Importiamo il main per accedere al ClinicalBootloader
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -36,12 +37,12 @@ class _LoginPageState extends State<LoginPage> {
       // 2. Controllo di sicurezza standard di Flutter
       if (!mounted) return;
       
-      // 3. LA NAVIGAZIONE DIRETTA: 
-      // Usiamo pushReplacement per impedire all'utente di tornare al login col tasto "Indietro"
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeDashboard()),
+      // 3. NAVIGAZIONE MANUALE CON PUSH: 
+      // Manteniamo la LoginPage sullo stack e andiamo al Bootloader 
+      // per ricalibrare i dati biometrici prima di accedere alla Dashboard.
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ClinicalBootloader()),
       );
-
     } catch (e) {
       // Se la password è "admin/123", questo blocco scatta.
       if (!mounted) return;

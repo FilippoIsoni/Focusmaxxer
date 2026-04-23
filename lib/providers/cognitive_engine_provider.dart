@@ -159,6 +159,19 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _wakeupTime = baseline.wakeupTime;
     _internalClock = DateTime.now();
 
+    // Dato che il provider è globale, resettiamo l'intero stato
+    // per evitare che dati vecchi sopravvivano a un logout/login
+    _currentState = EngineState.idle;
+    _elapsedFocusSeconds = 0;
+    _elapsedBreakSeconds = 0;
+    _dailyWorkedSeconds = 0;
+    _breakExtensions = 0;
+    _isBreakRecommended = false;
+    _isFocusRecommended = false;
+    _advisoryMessage = "";
+    _biometrics.resetSession();
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+
     // Compute initial Homeostatic Reservoir based on sleep efficiency penalty
     double initialR = SafteEngine.maxReservoirCapacity;
     if (baseline.sleepEfficiency < 85.0) {
