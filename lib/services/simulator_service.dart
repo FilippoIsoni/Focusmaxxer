@@ -1,51 +1,50 @@
 import 'dart:async';
-import 'dart:math' as math;
+import 'dart:math';
 
-// --- ASTRAZIONE DEL TEMPO ---
-abstract class ITickerService {
-  Stream<void> get tickStream;
-  void start(Duration interval);
-  void stop();
-  void dispose(); // Sicurezza della memoria
-}
+// --- IL MOTORE DEL TEMPO FINTO ---
+class WarpTickerService {
+  double speedMultiplier;
+  Timer? timer;
+  StreamController<void> controller = StreamController<void>.broadcast();
 
-class WarpTickerService implements ITickerService {
-  final double speedMultiplier;
-  Timer? _timer;
-  final StreamController<void> _controller = StreamController<void>.broadcast();
-
-  // Permette di accelerare il tempo (es. 60.0 fa durare 1 ora solo 1 minuto reale)
+  // Costruttore
   WarpTickerService({this.speedMultiplier = 60.0});
 
-  @override
-  Stream<void> get tickStream => _controller.stream;
-
-  @override
+  // Avvia il timer finto
   void start(Duration interval) {
-    stop();
-    // Clamp di sicurezza: evita il blocco del thread se il tempo compresso scende sotto 1 ms
-    final int compressedMilliseconds = math.max(
-      1,
-      (interval.inMilliseconds / speedMultiplier).round(),
-    );
+    stop(); // Ferma eventuali timer precedenti
 
-    _timer = Timer.periodic(Duration(milliseconds: compressedMilliseconds), (
-      _,
-    ) {
-      if (!_controller.isClosed) _controller.add(null);
+    // Calcoliamo quanti millisecondi deve durare il timer compresso
+    int realMilliseconds = interval.inMilliseconds;
+    int fakeMilliseconds = (realMilliseconds / speedMultiplier).round();
+
+    // Sicurezza per non far esplodere il telefono se il numero va a zero
+    if (fakeMilliseconds < 1) {
+      fakeMilliseconds = 1;
+    }
+
+    // Facciamo partire il timer
+    timer = Timer.periodic(Duration(milliseconds: fakeMilliseconds), (_) {
+      // Se la "radio" è ancora accesa, manda il segnale
+      if (controller.isClosed == false) {// Se il controller è ancora aperto, manda un segnale
+        controller.add(null); // per ogni tick del timer il controller emette un segnale
+        // per poter notificare la Cognitive Engine che è passato del tempo
+      }
     });
   }
 
-  @override
+  // Ferma il timer
   void stop() {
-    _timer?.cancel();
-    _timer = null;
+    if (timer != null) {
+      timer!.cancel();// punto esclamativo segnala che so per certo che timer non è null
+      timer = null;
+    }
   }
 
-  @override
+  // Spegne tutto
   void dispose() {
     stop();
-    _controller.close();
+    controller.close();
   }
 }
 
@@ -53,46 +52,45 @@ class WarpTickerService implements ITickerService {
 enum SimulationScenario { optimalFlow, acuteStress, incompleteRecovery }
 
 class ScenarioSimulator {
-  final SimulationScenario currentScenario;
-  final math.Random _rand;
+  SimulationScenario currentScenario;
+  late Random rand;
 
-  // Il seed rende lo scenario deterministico (identico a ogni run) per il TDD
-  ScenarioSimulator(this.currentScenario, {int? seed})
-    : _rand = math.Random(seed);
+  // Costruttore
+  ScenarioSimulator(this.currentScenario, {int? seed}) {
+    rand = Random(seed);
+  }
 
-  double getSimulatedHR(
-    int elapsedFocusSeconds,
-    int elapsedBreakSeconds,
-    bool isBreak,
-  ) {
-    if (isBreak) {
+  // Calcola il battito cardiaco in base alla situazione
+  double getSimulatedHR(int elapsedFocusSeconds, int elapsedBreakSeconds, bool isBreak) {
+    
+    // CASO 1: L'utente è in pausa
+    if (isBreak == true) {
       if (currentScenario == SimulationScenario.incompleteRecovery) {
-        // Fallimento HRR: Il battito resta anormalmente alto durante la pausa
-        return 85.0 + _rand.nextInt(10);
+        return 85.0 + rand.nextInt(10); // Battito resta alto (Stress)
+      } else {
+        return 60.0 + rand.nextInt(5); // Recupero normale e sano
       }
-      // Recupero parasimpatico fisiologico
-      return 60.0 + _rand.nextInt(5);
     }
 
-    // Fase di Focus
-    switch (currentScenario) {
-      case SimulationScenario.optimalFlow:
-        // Studio profondo: battito costante
-        return 65.0 + _rand.nextInt(5);
-
-      case SimulationScenario.acuteStress:
-        // Trigger del Fail-Safe 1: dal minuto 15 al minuto 20 il battito esplode
-        if (elapsedFocusSeconds > 900 && elapsedFocusSeconds < 1200) {
-          return 115.0 + _rand.nextInt(10);
-        }
-        // Negli altri momenti è un battito normale
-        return 70.0 + _rand.nextInt(8);
-
-      default:
-        return 65.0;
+    // CASO 2: L'utente sta studiando (Focus)
+    if (currentScenario == SimulationScenario.optimalFlow) {
+      return 65.0 + rand.nextInt(5); // Studio sereno e costante
+      
+    } else if (currentScenario == SimulationScenario.acuteStress) {
+      // Se stiamo simulando uno stress acuto e siamo tra il minuto 15 e 20
+      if (elapsedFocusSeconds > 900 && elapsedFocusSeconds < 1200) {
+        return 115.0 + rand.nextInt(10); // Il battito schizza in alto!
+      } else {
+        return 70.0 + rand.nextInt(8); // Resto della sessione normale
+      }
+      
+    } else {
+      return 65.0; // Valore di sicurezza se qualcosa va storto
     }
   }
 
-  // Simuliamo un'attività statica (zero passi), fondamentale per non invalidare lo Z-Score HR
-  int getSimulatedSteps() => 0;
+  // Passi simulati: sempre fermo sulla sedia a studiare
+  int getSimulatedSteps() {
+    return 0; 
+  }
 }

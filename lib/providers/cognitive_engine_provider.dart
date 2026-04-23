@@ -25,7 +25,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // ==========================================
 
   final BiometricAnalyzer _biometrics = BiometricAnalyzer();
-  final ITickerService _ticker;
+  final WarpTickerService _ticker;
   ScenarioSimulator _scenarioSimulator;
   StreamSubscription<void>? _tickSubscription;
 
@@ -135,7 +135,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
     );
 
     // Listen to the Time Infrastructure (Real or Accelerated)
-    _tickSubscription = _ticker.tickStream.listen((_) {
+    _tickSubscription = _ticker.controller.stream.listen((_) {
       if (_currentState == EngineState.idle) {
         _internalClock = DateTime.now();
         _checkMidnightRollover();

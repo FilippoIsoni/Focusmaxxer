@@ -28,16 +28,16 @@ class FocusMaxxerApp extends StatelessWidget {
         Provider<ImpactApiService>(create: (_) => ImpactApiService()),
 
         // 2. Time Infrastructure (Accelerated Simulator at 60x for TDD)
-        Provider<ITickerService>(
+        Provider<WarpTickerService>(
           create: (_) => WarpTickerService(speedMultiplier: 60.0),
           dispose: (_, service) => service.dispose(),
         ),
 
         // 3. Central Cognitive Engine
-        ChangeNotifierProxyProvider<ITickerService, CognitiveEngineProvider>(
+        ChangeNotifierProxyProvider<WarpTickerService, CognitiveEngineProvider>(
           create: (context) => CognitiveEngineProvider(
-            context.read<ITickerService>(),
-            scenario: SimulationScenario.optimalFlow,
+            context.read<WarpTickerService>(),
+            scenario: SimulationScenario.acuteStress,
           ),
           update: (context, ticker, previousEngine) =>
               previousEngine ?? CognitiveEngineProvider(ticker),
