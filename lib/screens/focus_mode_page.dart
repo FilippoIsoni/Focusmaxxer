@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../widgets/biometric_ring.dart';
 import '../providers/cognitive_engine_provider.dart';
-import 'session_report.dart'; // <-- IMPORTANTE: Aggiunto l'import della nuova pagina
+import 'session_report.dart';
 import 'break_mode_page.dart';
 
 class FocusModePage extends StatefulWidget {
@@ -15,18 +15,36 @@ class FocusModePage extends StatefulWidget {
 }
 
 class _FocusModePageState extends State<FocusModePage> {
-  late DateTime _sessionStartTime;
+  late CognitiveEngineProvider _engine;
 
   @override
   void initState() {
     super.initState();
-    // Memorizziamo l'ora esatta in cui l'utente avvia la sessione
-    _sessionStartTime = DateTime.now();
+    // 1. Ci agganciamo al motore per ascoltare gli allarmi in background
+    _engine = context.read<CognitiveEngineProvider>();
+    _engine.addListener(_onEngineStateChanged);
+  }
+
+  @override
+  void dispose() {
+    // 2. Rimuoviamo l'ascoltatore quando chiudiamo la pagina
+    _engine.removeListener(_onEngineStateChanged);
+    super.dispose();
+  }
+
+  // 3. LA FUNZIONE SALVAVITA: se il motore va in pausa automatica, ci sbatte fuori!
+  void _onEngineStateChanged() {
+    if (_engine.currentState == EngineState.breakMode && mounted) {
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const BreakModePage()));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Si mette in ascolto del motore cognitivo
     final engine = context.watch<CognitiveEngineProvider>();
 
     final double fatiguePercent = engine.capacityMax > 0
@@ -34,7 +52,7 @@ class _FocusModePageState extends State<FocusModePage> {
         : 0.0;
 
     return Scaffold(
-      backgroundColor: Colors.black, // Nero OLED assoluto per la concentrazione
+      backgroundColor: Colors.black, // Nero OLED assoluto
       body: SafeArea(
         child: Stack(
           children: [
@@ -42,7 +60,7 @@ class _FocusModePageState extends State<FocusModePage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 1. IL CUORE BIOMETRICO (Widget Esterno Ottimizzato)
+                  // 1. IL CUORE BIOMETRICO
                   BiometricRing(
                     state: engine.currentState,
                     fatiguePercentage: fatiguePercent,
@@ -50,19 +68,8 @@ class _FocusModePageState extends State<FocusModePage> {
 
                   const SizedBox(height: 56),
 
-                  // 2. TIMER ISOLATO (Non innesca rebuild dell'intera pagina)
-                  GestureDetector(
-                    onDoubleTap: () {
-                      // TODO: Questo è solo un trick per testare la Break Mode.
-                      // Da rimuovere quando collegheremo il simulatore dati.
-                      Navigator.of(
-                        context,
-                      ).pushNamed('/break'); // Placeholder rapido
-                    },
-                    child: _SessionTimerDisplay(
-                      currentState: engine.currentState,
-                    ),
-                  ),
+                  // 2. TIMER ISOLATO (Senza errori!)
+                  const _SessionTimerDisplay(),
 
                   // 3. ALERT DI PENALITÀ FISIOLOGICA
                   if (engine.hasIncompleteRecovery) ...[
@@ -94,7 +101,7 @@ class _FocusModePageState extends State<FocusModePage> {
               ),
             ),
 
-            // 4. PULSANTE DI USCITA SICURA (Corretto)
+            // 4. CONTROLLI DI SESSIONE
             Positioned(
               bottom: 40,
               left: 0,
@@ -106,13 +113,9 @@ class _FocusModePageState extends State<FocusModePage> {
                   OutlinedButton.icon(
                     onPressed: () {
                       HapticFeedback.mediumImpact();
-
-                      // 1. Diciamo al motore SAFTE di avviare la pausa
                       context
                           .read<CognitiveEngineProvider>()
                           .manualTransitionToBreak();
-
-                      // 2. Navighiamo verso la schermata Zen
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const BreakModePage(),
@@ -141,17 +144,25 @@ class _FocusModePageState extends State<FocusModePage> {
                     ),
                   ),
 
-                  const SizedBox(width: 16), // Spazio vitale tra i pulsanti
+                  const SizedBox(width: 16),
+
                   // --- 4B. USCITA DEFINITIVA ---
                   GestureDetector(
                     onLongPress: () {
                       HapticFeedback.heavyImpact();
-                      final elapsed = DateTime.now().difference(
-                        _sessionStartTime,
+
+                      final currentEngine = context
+                          .read<CognitiveEngineProvider>();
+
+                      // --- CORREZIONE QUI: Ora leggiamo l'accumulatore totale della sessione! ---
+                      final fakeElapsed = Duration(
+                        seconds: currentEngine.sessionTotalFocusSeconds,
                       );
+
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                          builder: (_) => SessionReportPage(duration: elapsed),
+                          builder: (_) =>
+                              SessionReportPage(duration: fakeElapsed),
                         ),
                       );
                     },
@@ -166,7 +177,7 @@ class _FocusModePageState extends State<FocusModePage> {
                         border: Border.all(color: Colors.white.withAlpha(25)),
                       ),
                       child: const Text(
-                        "HOLD TO END", // Tradotto in inglese per coerenza
+                        "HOLD TO END",
                         style: TextStyle(
                           color: Colors.white54,
                           fontSize: 10,
@@ -187,57 +198,27 @@ class _FocusModePageState extends State<FocusModePage> {
 }
 
 // --- MICRO-WIDGET PER L'OTTIMIZZAZIONE DEL REBUILD ---
-class _SessionTimerDisplay extends StatefulWidget {
-  final EngineState currentState;
-  const _SessionTimerDisplay({required this.currentState});
+class _SessionTimerDisplay extends StatelessWidget {
+  const _SessionTimerDisplay();
 
-  @override
-  State<_SessionTimerDisplay> createState() => _SessionTimerDisplayState();
-}
-
-class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
-  late Timer _timer;
-  late DateTime _stateStartTime;
-
-  @override
-  void initState() {
-    super.initState();
-    _stateStartTime = DateTime.now();
-    // Il Timer ora invoca setState solo su questo specifico frammento di testo
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant _SessionTimerDisplay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Logica di stato sicura: resetta il cronometro se il motore cambia fase
-    if (oldWidget.currentState != widget.currentState) {
-      _stateStartTime = DateTime.now();
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel(); // Prevenzione Memory Leak
-    super.dispose();
-  }
-
-  String _formatDuration(Duration duration) {
+  String _formatDuration(int totalSeconds) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String minutes = twoDigits(duration.inMinutes.remainder(60));
-    String seconds = twoDigits(duration.inSeconds.remainder(60));
+    String minutes = twoDigits((totalSeconds ~/ 60) % 60);
+    String seconds = twoDigits(totalSeconds % 60);
 
-    if (duration.inHours > 0) {
-      return "${duration.inHours}:$minutes:$seconds";
+    if (totalSeconds >= 3600) {
+      int hours = totalSeconds ~/ 3600;
+      return "$hours:$minutes:$seconds";
     }
     return "$minutes:$seconds";
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.currentState == EngineState.idle) {
+    final engine = context.watch<CognitiveEngineProvider>();
+
+    if (engine.currentState == EngineState.idle ||
+        engine.currentState == EngineState.analyzingBaseline) {
       return const Text(
         "--:--",
         style: TextStyle(
@@ -249,9 +230,10 @@ class _SessionTimerDisplayState extends State<_SessionTimerDisplay> {
       );
     }
 
-    final elapsed = DateTime.now().difference(_stateStartTime);
     return Text(
-      _formatDuration(elapsed),
+      // ATTENZIONE: Il timer a schermo deve continuare a mostrare SOLO il tempo
+      // dell'attuale blocco di focus (currentSessionSeconds), come fa la tecnica del pomodoro.
+      _formatDuration(engine.currentSessionSeconds),
       style: const TextStyle(
         fontSize: 64,
         fontWeight: FontWeight.w200,

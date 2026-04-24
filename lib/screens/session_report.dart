@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/cognitive_engine_provider.dart';
+import '../providers/analytics_provider.dart';
+import '../models/session_data.dart';
 
 class SessionReportPage extends StatefulWidget {
   final Duration duration;
@@ -17,15 +19,26 @@ class _SessionReportPageState extends State<SessionReportPage> {
 
   void _finishSession() {
     final engine = context.read<CognitiveEngineProvider>();
+    final analytics = context.read<AnalyticsProvider>();
 
     // NEL NUOVO MODELLO SAFTE:
     // Il feedback dell'utente (RPE) non ricalibra più manualmente il "secchio",
     // ma potrà essere inviato al database per le tue Analytics future.
     // La chiusura sicura della sessione e dei timer è ora gestita da endSession().
-    engine.endSession();
+    // SALVIAMO I DATI!
 
+    // CODICE MODIFICATO, RIGUARDARE IL COMMENTO QUI SOPRA
+    analytics.addSession(
+      CognitiveSession(
+        date: DateTime.now(),
+        durationSeconds: widget.duration.inSeconds,
+        perceivedExertion: _selectedRpe,
+        endingEffectiveness: engine.currentEffectiveness,
+      ),
+    );
+
+    engine.endSession();
     HapticFeedback.mediumImpact();
-    // Torniamo alla Dashboard
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 

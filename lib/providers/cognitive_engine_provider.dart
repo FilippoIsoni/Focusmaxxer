@@ -70,6 +70,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   int _elapsedBreakSeconds = 0;
   int _dailyWorkedSeconds = 0;
   int _breakExtensions = 0;
+  int _sessionTotalFocusSeconds = 0;
 
   // Advisory Paradigm (Human-in-the-loop flags)
   bool _isBreakRecommended = false;
@@ -93,6 +94,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   int get segmentDurationMinutes => _targetSegmentSeconds ~/ 60;
   int get workedTodayMinutes => _dailyWorkedSeconds ~/ 60;
   bool get hasIncompleteRecovery => _breakExtensions > 0;
+  int get sessionTotalFocusSeconds => _sessionTotalFocusSeconds;
   double get morningRHR => _biometrics.muBase;
 
   // Advisory System
@@ -208,6 +210,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
 
     _calculateNextSegmentDuration();
     _elapsedFocusSeconds = 0;
+    _sessionTotalFocusSeconds = 0;
     _breakExtensions = 0;
     _isBreakRecommended = false;
     _advisoryMessage = "Calibrating physiological baseline...";
@@ -264,6 +267,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
 
   void _handleAnalyzingBaseline() {
     _elapsedFocusSeconds += tickDurationSeconds;
+    _sessionTotalFocusSeconds += tickDurationSeconds;
     if (_elapsedFocusSeconds == 180) {
       // 3 minutes calibration
       _biometrics.optimizeBaseline();
@@ -275,6 +279,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   void _handleFocusMode(int steps) {
     _elapsedFocusSeconds += tickDurationSeconds;
     _dailyWorkedSeconds += tickDurationSeconds;
+    _sessionTotalFocusSeconds += tickDurationSeconds;
 
     // Periodically re-optimize baseline during the first 10 minutes
     if (_elapsedFocusSeconds <= 600 && _elapsedFocusSeconds % 15 == 0) {
@@ -293,10 +298,16 @@ class CognitiveEngineProvider extends ChangeNotifier {
         _isBreakRecommended = true;
         _advisoryMessage =
             "Optimal focus time reached. Initiate break to consolidate recovery.";
+
+        // --- INSERITA MODIFICA: Transizione automatica a fine timer naturale ---
+        manualTransitionToBreak();
       } else if (_biometrics.isAcuteOverload(steps)) {
         _isBreakRecommended = true;
         _advisoryMessage =
             "ACUTE OVERLOAD DETECTED. Immediate interruption highly advised.";
+
+        // --- INSERITA MODIFICA: Transizione automatica per allarme battito cardiaco ---
+        manualTransitionToBreak();
       }
     }
   }

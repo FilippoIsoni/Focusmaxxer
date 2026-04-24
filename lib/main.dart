@@ -7,6 +7,7 @@ import 'services/simulator_service.dart';
 
 import 'providers/auth_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
+import 'providers/analytics_provider.dart';
 
 import 'screens/onboarding_page.dart';
 import 'screens/login_page.dart';
@@ -45,6 +46,10 @@ class FocusMaxxerApp extends StatelessWidget {
 
         // 4. Authentication State Manager (CRITICAL FIX: Added missing provider)
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        // 5. Analytics Manager
+        ChangeNotifierProvider<AnalyticsProvider>(
+          create: (_) => AnalyticsProvider(),
+        ),
       ],
 
       // 5. Theme Injection & Dynamic Routing
