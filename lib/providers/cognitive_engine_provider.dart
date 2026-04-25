@@ -76,6 +76,8 @@ class CognitiveEngineProvider extends ChangeNotifier {
   bool _isBreakRecommended = false;
   bool _isFocusRecommended = false;
   String _advisoryMessage = "";
+  // lista per raccogliere i dati del battito cardiaco durante la sessione, da salvare in un database SQLite per analisi post-sessione e miglioramento continuo del modello predittivo
+  final List<Map<String, dynamic>> hrTimeline = [];
 
   // ==========================================
   // PUBLIC GETTERS (For UI Consumption)
@@ -199,6 +201,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _sessionTotalFocusSeconds = 0;
     _breakExtensions = 0;
     _isBreakRecommended = false;
+    hrTimeline.clear(); // Pulizia della timeline all'inizio di ogni sessione
     _advisoryMessage = "Calibrating physiological baseline...";
     _biometrics.resetSession();
 
@@ -231,6 +234,13 @@ class CognitiveEngineProvider extends ChangeNotifier {
     );
     final int steps = _scenarioSimulator.getSimulatedSteps();
     _biometrics.addDataPoint(hr, _elapsedFocusSeconds);
+    // --- NUOVO: REGISTRAZIONE NELLA SCATOLA NERA ---
+    hrTimeline.add({
+      'time': _internalClock.toIso8601String(), // Orario esatto del tick
+      'hr': hr.round(),                         // Valore del battito (intero)
+      'state': _currentState.name,              // focus, breakMode, ecc.
+    });
+    // ----------------------------------------------
 
     // 5. State Machine Routing
     switch (_currentState) {
@@ -450,7 +460,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
       circadianValue: 0.0,
       timestamp: _internalClock,
     );
-    // TODO: Aggiungere _hrTimeline.clear() quando implementeremo le liste per il Database SQLite
+    hrTimeline.clear(); // 6. Pulizia della timeline del battito cardiaco
     // 6. Aggiorniamo la UI affinché si svuoti
     notifyListeners();
   }
