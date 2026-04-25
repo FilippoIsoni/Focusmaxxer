@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../main.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -36,10 +37,14 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text,
       );
 
-      // CRITICAL FIX: No manual Navigator.push() here!
-      // The Consumer<AuthProvider> in main.dart automatically detects the state change
-      // and silently replaces this page with the ClinicalBootloader.
-      // We just let the widget die gracefully.
+      if (!mounted) return;
+
+      // 4. Navigazione Imperativa: Sostituisci il Login con il Bootloader
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ClinicalBootloader()),
+      );
+
+   
     } catch (e) {
       if (!mounted) return;
 
@@ -237,29 +242,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 40),
-
-                        // --- REGISTRATION LINK ---
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'New user? ',
-                              style: TextStyle(
-                                color: colorScheme.onSurface.withAlpha(179),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: _isLoading ? null : () {},
-                              child: Text(
-                                'Register now',
-                                style: TextStyle(
-                                  color: colorScheme.primary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),

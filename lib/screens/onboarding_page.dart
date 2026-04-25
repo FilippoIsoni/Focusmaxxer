@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-
+import 'login_page.dart';
 import '../providers/auth_provider.dart';
 
 // ==========================================
@@ -83,16 +83,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   Future<void> _finishOnboarding() async {
     if (_isFinishing) return;
-
     setState(() => _isFinishing = true);
     HapticFeedback.mediumImpact();
-
-    // Segnala al provider che l'onboarding è completato.
-    // Il Consumer in main.dart intercetterà il cambiamento (AuthStatus.unauthenticated)
-    // e sostituirà automaticamente la schermata con la LoginPage.
+    // 1. Salva in memoria che l'onboarding è stato completato
     await context.read<AuthProvider>().completeOnboarding();
-
-    // NESSUN NAVIGATOR.PUSH QUI! Lasciamo fare al Rebuild Engine di Flutter.
+  // 2. Sicurezza: controlla che l'utente non abbia chiuso la pagina 
+  // mentre il database salvava i dati.
+    if (!mounted) return;
+  // 3. NAVIGAZIONE MANUALE (Imperativa)
+  // Usiamo pushReplacement perché non vogliamo che l'utente possa 
+  // tornare indietro all'onboarding premendo il tasto "Back".
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
   }
 
   void _nextPage() {

@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'services/impact_api_service.dart';
 import 'services/simulator_service.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';// Aggiunto per la memoria
+
 import 'providers/auth_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
 import 'providers/analytics_provider.dart';
@@ -38,7 +40,7 @@ class FocusMaxxerApp extends StatelessWidget {
         ChangeNotifierProxyProvider<WarpTickerService, CognitiveEngineProvider>(
           create: (context) => CognitiveEngineProvider(
             context.read<WarpTickerService>(),
-            scenario: SimulationScenario.acuteStress,
+            scenario: SimulationScenario.optimalFlow,
           ),
           update: (context, ticker, previousEngine) =>
               previousEngine ?? CognitiveEngineProvider(ticker),
@@ -133,30 +135,50 @@ class FocusMaxxerApp extends StatelessWidget {
           ),
         ),
         // Dynamic Router for Authentication Flow
-        home: Consumer<AuthProvider>(
-          builder: (context, auth, _) {
-            switch (auth.status) {
-              case AuthStatus.unknown:
-                return const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
-                  ),
-                );
-              case AuthStatus.firstTime:
-                return const OnboardingPage();
-              case AuthStatus.unauthenticated:
-                return const LoginPage();
-              case AuthStatus.authenticated:
-                // CRITICAL FIX: Intercepts the flow to initialize clinical data
-                return const ClinicalBootloader();
-            }
-          },
-        ),
+        home: const AppEntryGate(),
       ),
     );
   }
 }
 
+
+/// AppEntryGate Widget: Determines the initial screen based on authentication status.
+class AppEntryGate extends StatelessWidget {
+  const AppEntryGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Il FutureBuilder gestisce l'attesa per noi!
+    return FutureBuilder<SharedPreferences>(
+      // 1. Diamo in pasto l'operazione lenta (leggere la memoria)
+      future: SharedPreferences.getInstance(), 
+      builder: (context, snapshot) {
+        // 2. MENTRE ASPETTA: Mostra la rotellina automaticamente
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+            ),
+          );
+        }
+        // 3. QUANDO HA FINITO: snapshot.data contiene le nostre preferenze!
+        if (snapshot.hasData) {
+          final prefs = snapshot.data!;
+          final isFirstTime = prefs.getBool('isFirstTime') ?? true;
+          final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+          // Decidiamo la pagina istantaneamente
+          if (isFirstTime) return const OnboardingPage();
+          if (isLoggedIn) return const ClinicalBootloader();
+          return const LoginPage();
+        }
+
+        // 4. Se c'è stato un errore strano di sistema
+        return const LoginPage(); 
+      },
+    );
+  }
+}
 /// Bootloader Widget: Blocks UI access until biological parameters are fetched from the server.
 /// Ensures the CognitiveEngine is fully calibrated before the user reaches the Dashboard.
 class ClinicalBootloader extends StatefulWidget {

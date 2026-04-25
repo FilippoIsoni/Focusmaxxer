@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'login_page.dart';
+import 'home_dashboard.dart';
+import '../providers/cognitive_engine_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -158,9 +161,14 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isProcessing = true);
 
     try {
+      // 1. SPEGNI IL MOTORE: Ferma i timer e pulisci la RAM della sessione
+      context.read<CognitiveEngineProvider>().resetEngine();
       await context.read<AuthProvider>().logout();
       if (!mounted) return;
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).pushAndRemoveUntil(
+        PremiumPageRoute(page: const LoginPage()),
+        (route) => false,
+      );
     } catch (e) {
       _showCustomSnackBar('Disconnection sequence failed.', isError: true);
       if (mounted) setState(() => _isProcessing = false);

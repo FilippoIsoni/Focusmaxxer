@@ -160,20 +160,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
   void initializeBaseline(DailyBaseline baseline) {
     _wakeupTime = baseline.wakeupTime;
     _internalClock = DateTime.now();
-
-    // Dato che il provider è globale, resettiamo l'intero stato
-    // per evitare che dati vecchi sopravvivano a un logout/login
-    _currentState = EngineState.idle;
-    _elapsedFocusSeconds = 0;
-    _elapsedBreakSeconds = 0;
-    _dailyWorkedSeconds = 0;
-    _breakExtensions = 0;
-    _isBreakRecommended = false;
-    _isFocusRecommended = false;
-    _advisoryMessage = "";
-    _biometrics.resetSession();
-    _ticker.start(const Duration(minutes: idleTickMinutes));
-
     // Compute initial Homeostatic Reservoir based on sleep efficiency penalty
     double initialR = SafteEngine.maxReservoirCapacity;
     if (baseline.sleepEfficiency < 85.0) {
@@ -429,5 +415,43 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _tickSubscription?.cancel();
     _ticker.dispose();
     super.dispose();
+  }
+  
+  // SYSTEM RESET (For Logout)
+  // ==========================================
+  /// Esegue una pulizia profonda del motore cognitivo.
+  /// Riporta la macchina a stati su 'idle' e azzera tutti i contatori e le metriche.
+  /// Da chiamare OBBLIGATORIAMENTE durante il logout per non inquinare la sessione successiva.
+  void resetEngine() {
+    // 1. Spegniamo la sessione attiva e rallentiamo il Ticker al ritmo di background
+    _currentState = EngineState.idle;
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+    // 2. Azzeramento dei contatori temporali
+    _targetSegmentSeconds = 0;
+    _targetBreakSeconds = 0;
+    _elapsedFocusSeconds = 0;
+    _elapsedBreakSeconds = 0;
+    _dailyWorkedSeconds = 0;
+    _breakExtensions = 0;
+    _sessionTotalFocusSeconds = 0;
+    // 3. Reset dei messaggi e dei flag di stato
+    _isBreakRecommended = false;
+    _isFocusRecommended = false;
+    _advisoryMessage = "";
+    // 4. Pulizia profonda del motore biometrico (fondamentale per le medie cardiache)
+    _biometrics.resetSession();
+    // 5. Ripristino del SAFTE a valori "vergini" per evitare picchi grafici errati al login
+    _internalClock = DateTime.now();
+    _wakeupTime = _internalClock.subtract(const Duration(hours: 2));
+    _currentDay = _internalClock.day;
+    _safteState = SafteState(
+      effectiveness: 100.0,
+      reservoir: SafteEngine.maxReservoirCapacity,
+      circadianValue: 0.0,
+      timestamp: _internalClock,
+    );
+    // TODO: Aggiungere _hrTimeline.clear() quando implementeremo le liste per il Database SQLite
+    // 6. Aggiorniamo la UI affinché si svuoti
+    notifyListeners();
   }
 }
