@@ -5,9 +5,10 @@ class BiometricAnalyzer {
   // CONSTANTS & THRESHOLDS (Dynamic Resolution)
   // ==========================================
 
-  // Tick resolution definition (Ensures math stays consistent if tick rate changes)
+  // Tick resolution definition
   static const int _tickDurationSeconds = 5;
   static const int _oneMinTicks = 60 ~/ _tickDurationSeconds; // 12 ticks
+  static const int _threeMinTicks = 180 ~/ _tickDurationSeconds; // 36 ticks
   static const int _tenMinTicks = 600 ~/ _tickDurationSeconds; // 120 ticks
   static const int _baselineMinTicks =
       180 ~/ _tickDurationSeconds; // 36 ticks (3 minutes)
@@ -15,9 +16,7 @@ class BiometricAnalyzer {
   // Clinical Thresholds
   static const double _minValidSigma = 0.5; // Prevents "flatline" sensor errors
   static const double _defaultSigma = 3.0; // Safe default standard deviation
-  static const double _acuteOverloadZScore = 2.0; // Trigger for Fail-Safe 1
-  static const double _incompleteRecoveryZScore =
-      1.0; // Trigger for Fail-Safe 2
+  static const double _acuteOverloadZScore = 2.0; // Z-Score target for anomaly
 
   // ==========================================
   // INTERNAL STATE
@@ -29,11 +28,11 @@ class BiometricAnalyzer {
 
   // Ring buffers for moving averages
   final List<double> _window10Min = [];
+  final List<double> _window3Min =
+      []; // New 3-minute window for m-out-of-n density
   final List<double> _window1Min = [];
 
-  int _consecutiveAnomalousTicks = 0;
-
-  // Public getter required by the Cognitive Provider to clear the 1-min window during breaks
+  // Public getters required by the Cognitive Provider
   List<double> get window1Min => _window1Min;
   List<double> get window10Min => _window10Min;
 
@@ -44,25 +43,23 @@ class BiometricAnalyzer {
   /// Completely resets the analyzer state for a new session or a fresh cycle.
   void resetSession() {
     _window10Min.clear();
+    _window3Min.clear();
     _window1Min.clear();
-    _consecutiveAnomalousTicks = 0;
     rawSigmaBase = double.infinity;
   }
 
   /// Ingests a new Heart Rate data point and maintains the sliding windows sizes.
   void addDataPoint(double hr, int elapsedFocusSeconds) {
     _window1Min.add(hr);
-    if (_window1Min.length > _oneMinTicks) {
-      _window1Min.removeAt(0); // Maintain 1-minute sliding window
-    }
+    if (_window1Min.length > _oneMinTicks) _window1Min.removeAt(0);
+
+    _window3Min.add(hr);
+    if (_window3Min.length > _threeMinTicks) _window3Min.removeAt(0);
 
     // Only collect baseline data during the first 10 minutes of Focus Mode
     if (elapsedFocusSeconds <= 600) {
       _window10Min.add(hr);
-      // Failsafe: Prevent infinite growth in case of logic desynchronization
-      if (_window10Min.length > _tenMinTicks) {
-        _window10Min.removeAt(0);
-      }
+      if (_window10Min.length > _tenMinTicks) _window10Min.removeAt(0);
     }
   }
 
@@ -102,36 +99,32 @@ class BiometricAnalyzer {
     }
   }
 
-  /// Checks if the user is experiencing acute cognitive/sympathetic overload
-  /// based on Z-Score deviation from the optimized baseline.
-  bool isAcuteOverload(int steps) {
-    if (_window1Min.length < _oneMinTicks) return false;
+  /// Returns a normalized stress index (0.0 to 1.0) based on the m-out-of-n rule.
+  /// Reaches 1.0 when 25 out of the last 36 ticks (approx 70%) exceed the Z-Score threshold.
+  double get currentStressIndex {
+    if (_window3Min.isEmpty || rawSigmaBase == double.infinity) return 0.0;
 
-    final double windowAvg = _window1Min.reduce((a, b) => a + b) / _oneMinTicks;
-    final double zScore = (windowAvg - muBase) / sigmaBase;
-
-    // Only consider anomalous HR if the user is physically static (steps <= 5)
-    if (zScore >= _acuteOverloadZScore && steps <= 5) {
-      _consecutiveAnomalousTicks++;
-      // Trigger overload only if sustained for 3 consecutive minutes
-      if (_consecutiveAnomalousTicks >= _baselineMinTicks) return true;
-    } else {
-      // Rapid decay of anomalous ticks if the heart rate normalizes
-      _consecutiveAnomalousTicks = math.max(0, _consecutiveAnomalousTicks - 2);
+    int anomalousCount = 0;
+    for (double hr in _window3Min) {
+      double zScore = (hr - muBase) / sigmaBase;
+      if (zScore >= _acuteOverloadZScore) anomalousCount++;
     }
-    return false;
+
+    // Map 0-25 anomalous ticks to a 0.0 - 1.0 percentage
+    return (anomalousCount / 25.0).clamp(0.0, 1.0);
+  }
+
+  /// Checks if the user is experiencing acute cognitive/sympathetic overload.
+  bool isAcuteOverload() {
+    return currentStressIndex >= 1.0;
   }
 
   /// Evaluates if the physiological recovery during the Break Mode is insufficient.
   bool isRecoveryIncomplete() {
-    // Safety check: Avoid division by zero if the array is empty
     if (_window1Min.isEmpty) return false;
-
     final double windowAvg =
         _window1Min.reduce((a, b) => a + b) / _window1Min.length;
     final double zScore = (windowAvg - muBase) / sigmaBase;
-
-    // Recovery is incomplete if HR remains > 1 standard deviation above baseline
-    return zScore > _incompleteRecoveryZScore;
+    return zScore > 1.0; // Incomplete recovery threshold
   }
 }

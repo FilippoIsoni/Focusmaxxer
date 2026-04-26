@@ -15,44 +15,14 @@ class FocusModePage extends StatefulWidget {
 }
 
 class _FocusModePageState extends State<FocusModePage> {
-  late CognitiveEngineProvider _engine;
-
-  @override
-  void initState() {
-    super.initState();
-    // 1. Ci agganciamo al motore per ascoltare gli allarmi in background
-    _engine = context.read<CognitiveEngineProvider>();
-    _engine.addListener(_onEngineStateChanged);
-  }
-
-  @override
-  void dispose() {
-    // 2. Rimuoviamo l'ascoltatore quando chiudiamo la pagina
-    _engine.removeListener(_onEngineStateChanged);
-    super.dispose();
-  }
-
-  // 3. LA FUNZIONE SALVAVITA: se il motore va in pausa automatica, ci sbatte fuori!
-  void _onEngineStateChanged() {
-    if (_engine.currentState == EngineState.breakMode && mounted) {
-      if (ModalRoute.of(context)?.isCurrent == true) {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const BreakModePage()));
-      }
-    }
-  }
+  // Removed forced listener logic. The UI simply reacts to the state now.
 
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<CognitiveEngineProvider>();
 
-    final double fatiguePercent = engine.capacityMax > 0
-        ? (engine.currentFatigue / engine.capacityMax).clamp(0.0, 1.0)
-        : 0.0;
-
     return Scaffold(
-      backgroundColor: Colors.black, // Nero OLED assoluto
+      backgroundColor: Colors.black, // Pure OLED black
       body: SafeArea(
         child: Stack(
           children: [
@@ -60,21 +30,25 @@ class _FocusModePageState extends State<FocusModePage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 1. IL CUORE BIOMETRICO
+                  // 1. THE BIOMETRIC CORE
                   BiometricRing(
                     state: engine.currentState,
-                    fatiguePercentage: fatiguePercent,
+                    progressPercentage: engine.currentSegmentProgress,
+                    stressIndex: engine.currentStressIndex,
                   ),
 
                   const SizedBox(height: 56),
 
-                  // 2. TIMER ISOLATO (Senza errori!)
+                  // 2. ISOLATED TIMER
                   const _SessionTimerDisplay(),
 
-                  // 3. ALERT DI PENALITÀ FISIOLOGICA
-                  if (engine.hasIncompleteRecovery) ...[
-                    const SizedBox(height: 24),
-                    Container(
+                  // 3. PHYSIOLOGICAL PENALTY / ADVISORY ALERT
+                  // Fades in organically when the engine recommends a break
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 500),
+                    opacity: engine.isBreakRecommended ? 1.0 : 0.0,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 24),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 8,
@@ -86,9 +60,10 @@ class _FocusModePageState extends State<FocusModePage> {
                           color: Colors.redAccent.withAlpha(127),
                         ),
                       ),
-                      child: const Text(
-                        "PENALITÀ: RECUPERO INCOMPLETO",
-                        style: TextStyle(
+                      child: Text(
+                        engine.advisoryMessage.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
                           color: Colors.redAccent,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -96,12 +71,12 @@ class _FocusModePageState extends State<FocusModePage> {
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
 
-            // 4. CONTROLLI DI SESSIONE
+            // 4. SESSION CONTROLS
             Positioned(
               bottom: 40,
               left: 0,
@@ -109,7 +84,7 @@ class _FocusModePageState extends State<FocusModePage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // --- 4A. PAUSA MANUALE ---
+                  // --- 4A. MANUAL PAUSE ---
                   OutlinedButton.icon(
                     onPressed: () {
                       HapticFeedback.mediumImpact();
@@ -146,19 +121,15 @@ class _FocusModePageState extends State<FocusModePage> {
 
                   const SizedBox(width: 16),
 
-                  // --- 4B. USCITA DEFINITIVA ---
+                  // --- 4B. DEFINITIVE EXIT ---
                   GestureDetector(
                     onLongPress: () {
                       HapticFeedback.heavyImpact();
-
                       final currentEngine = context
                           .read<CognitiveEngineProvider>();
-
-                      // --- CORREZIONE QUI: Ora leggiamo l'accumulatore totale della sessione! ---
                       final fakeElapsed = Duration(
                         seconds: currentEngine.sessionTotalFocusSeconds,
                       );
-
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (_) =>
@@ -197,7 +168,7 @@ class _FocusModePageState extends State<FocusModePage> {
   }
 }
 
-// --- MICRO-WIDGET PER L'OTTIMIZZAZIONE DEL REBUILD ---
+// --- MICRO-WIDGET FOR REBUILD OPTIMIZATION ---
 class _SessionTimerDisplay extends StatelessWidget {
   const _SessionTimerDisplay();
 
@@ -231,8 +202,6 @@ class _SessionTimerDisplay extends StatelessWidget {
     }
 
     return Text(
-      // ATTENZIONE: Il timer a schermo deve continuare a mostrare SOLO il tempo
-      // dell'attuale blocco di focus (currentSessionSeconds), come fa la tecnica del pomodoro.
       _formatDuration(engine.currentSessionSeconds),
       style: const TextStyle(
         fontSize: 64,

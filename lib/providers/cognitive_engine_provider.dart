@@ -59,9 +59,8 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // SAFTE tracking
   late SafteState _safteState;
   late DateTime _internalClock;
-  DateTime _wakeupTime =
-      DateTime.now(); // Safe fallback to prevent LateInitializationError
-  int _currentDay = DateTime.now().day; // Midnight rollover tracker
+  DateTime _wakeupTime = DateTime.now();
+  int _currentDay = DateTime.now().day;
 
   // Time tracking
   int _targetSegmentSeconds = 0;
@@ -76,7 +75,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   bool _isBreakRecommended = false;
   bool _isFocusRecommended = false;
   String _advisoryMessage = "";
-  // lista per raccogliere i dati del battito cardiaco durante la sessione, da salvare in un database SQLite per analisi post-sessione e miglioramento continuo del modello predittivo
+
   final List<Map<String, dynamic>> hrTimeline = [];
 
   // ==========================================
@@ -92,6 +91,12 @@ class CognitiveEngineProvider extends ChangeNotifier {
       SafteEngine.maxReservoirCapacity - _safteState.reservoir;
   double get capacityMax => SafteEngine.maxReservoirCapacity;
 
+  // New Getters for the UI Ring (Segment Progress & Stress Index)
+  double get currentSegmentProgress => _targetSegmentSeconds > 0
+      ? (_elapsedFocusSeconds / _targetSegmentSeconds).clamp(0.0, 1.0)
+      : 0.0;
+  double get currentStressIndex => _biometrics.currentStressIndex;
+
   // Session Metrics
   int get segmentDurationMinutes => _targetSegmentSeconds ~/ 60;
   int get workedTodayMinutes => _dailyWorkedSeconds ~/ 60;
@@ -104,7 +109,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
   bool get isFocusRecommended => _isFocusRecommended;
   String get advisoryMessage => _advisoryMessage;
 
-  /// Returns the exact active seconds based on current mode to sync UI with the WarpTicker
   int get currentSessionSeconds {
     if (_currentState == EngineState.analyzingBaseline ||
         _currentState == EngineState.focus) {
@@ -125,12 +129,9 @@ class CognitiveEngineProvider extends ChangeNotifier {
     SimulationScenario scenario = SimulationScenario.optimalFlow,
   }) : _scenarioSimulator = ScenarioSimulator(scenario) {
     _internalClock = DateTime.now();
-    _wakeupTime = _internalClock.subtract(
-      const Duration(hours: 2),
-    ); // Fallback value
+    _wakeupTime = _internalClock.subtract(const Duration(hours: 2));
     _currentDay = _internalClock.day;
 
-    // Create a safe default state before API injects real data
     _safteState = SafteState(
       effectiveness: 100.0,
       reservoir: SafteEngine.maxReservoirCapacity,
@@ -138,7 +139,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
       timestamp: _internalClock,
     );
 
-    // Listen to the Time Infrastructure (Real or Accelerated)
     _tickSubscription = _ticker.controller.stream.listen((_) {
       if (_currentState == EngineState.idle) {
         _internalClock = DateTime.now();
@@ -146,23 +146,20 @@ class CognitiveEngineProvider extends ChangeNotifier {
         _updateSafteState(isFocusing: false);
         notifyListeners();
       } else {
-        _processTick(); // Fast cycle (e.g., every 5 seconds)
+        _processTick();
       }
     });
 
     _ticker.start(const Duration(minutes: idleTickMinutes));
   }
 
-  /// Hot-swaps the testing scenario (Triggered via Dev Menu)
   void updateScenario(SimulationScenario newScenario) {
     _scenarioSimulator = ScenarioSimulator(newScenario);
   }
 
-  /// Ingests the morning biological baseline fetched from the server
   void initializeBaseline(DailyBaseline baseline) {
     _wakeupTime = baseline.wakeupTime;
     _internalClock = DateTime.now();
-    // Compute initial Homeostatic Reservoir based on sleep efficiency penalty
     double initialR = SafteEngine.maxReservoirCapacity;
     if (baseline.sleepEfficiency < 85.0) {
       initialR = math.max(
@@ -189,7 +186,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _internalClock = DateTime.now();
     _updateSafteState(isFocusing: false);
 
-    // Clinical block: Do not allow work if effectiveness is critically low
     if (_safteState.effectiveness < _inhibitedSafteThreshold) {
       _currentState = EngineState.inhibited;
       notifyListeners();
@@ -201,7 +197,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _sessionTotalFocusSeconds = 0;
     _breakExtensions = 0;
     _isBreakRecommended = false;
-    hrTimeline.clear(); // Pulizia della timeline all'inizio di ogni sessione
+    hrTimeline.clear();
     _advisoryMessage = "Calibrating physiological baseline...";
     _biometrics.resetSession();
 
@@ -215,43 +211,34 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // ==========================================
 
   void _processTick() {
-    // 1. Advance the internal clock
     _internalClock = _internalClock.add(
       const Duration(seconds: tickDurationSeconds),
     );
-
-    // 2. Prevent limit bypass across multiple days
     _checkMidnightRollover();
-
-    // 3. Update SAFTE mathematics based on current effort
     _updateSafteState(isFocusing: _currentState == EngineState.focus);
 
-    // 4. Ingest simulated biological data
     final double hr = _scenarioSimulator.getSimulatedHR(
       _elapsedFocusSeconds,
       _elapsedBreakSeconds,
       _currentState == EngineState.breakMode,
     );
-    final int steps = _scenarioSimulator.getSimulatedSteps();
-    _biometrics.addDataPoint(hr, _elapsedFocusSeconds);
-    // --- NUOVO: REGISTRAZIONE NELLA SCATOLA NERA ---
-    hrTimeline.add({
-      'time': _internalClock.toIso8601String(), // Orario esatto del tick
-      'hr': hr.round(),                         // Valore del battito (intero)
-      'state': _currentState.name,              // focus, breakMode, ecc.
-    });
-    // ----------------------------------------------
 
-    // 5. State Machine Routing
+    _biometrics.addDataPoint(hr, _elapsedFocusSeconds);
+    hrTimeline.add({
+      'time': _internalClock.toIso8601String(),
+      'hr': hr.round(),
+      'state': _currentState.name,
+    });
+
     switch (_currentState) {
       case EngineState.analyzingBaseline:
         _handleAnalyzingBaseline();
         break;
       case EngineState.focus:
-        _handleFocusMode(steps);
+        _handleFocusMode();
         break;
       case EngineState.breakMode:
-        _handleBreakMode();
+        _handleBreakMode(); // Questo metodo mancava
         break;
       default:
         break;
@@ -265,45 +252,38 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _elapsedFocusSeconds += tickDurationSeconds;
     _sessionTotalFocusSeconds += tickDurationSeconds;
     if (_elapsedFocusSeconds == 180) {
-      // 3 minutes calibration
       _biometrics.optimizeBaseline();
       _advisoryMessage = "Flow state identified. Session active.";
       _currentState = EngineState.focus;
     }
   }
 
-  void _handleFocusMode(int steps) {
+  void _handleFocusMode() {
     _elapsedFocusSeconds += tickDurationSeconds;
     _dailyWorkedSeconds += tickDurationSeconds;
     _sessionTotalFocusSeconds += tickDurationSeconds;
 
-    // Periodically re-optimize baseline during the first 10 minutes
     if (_elapsedFocusSeconds <= 600 && _elapsedFocusSeconds % 15 == 0) {
       _biometrics.optimizeBaseline();
     }
 
-    // Absolute biological limit check
     if (_dailyWorkedSeconds >= dailyMaxSeconds) {
       _triggerDailyLimit();
       return;
     }
 
-    // Advisory System Checks
+    // Advisory System Failsafe (Nudge invece di transizione forzata)
     if (!_isBreakRecommended) {
       if (_elapsedFocusSeconds >= _targetSegmentSeconds) {
         _isBreakRecommended = true;
         _advisoryMessage =
             "Optimal focus time reached. Initiate break to consolidate recovery.";
-
-        // --- INSERITA MODIFICA: Transizione automatica a fine timer naturale ---
-        manualTransitionToBreak();
-      } else if (_biometrics.isAcuteOverload(steps)) {
+      } else if (_biometrics.isAcuteOverload()) {
         _isBreakRecommended = true;
         _advisoryMessage =
-            "ACUTE OVERLOAD DETECTED. Immediate interruption highly advised.";
-
-        // --- INSERITA MODIFICA: Transizione automatica per allarme battito cardiaco ---
-        manualTransitionToBreak();
+            "COGNITIVE OVERLOAD DETECTED. Immediate interruption highly advised.";
+      } else {
+        _advisoryMessage = "Optimal Flow Maintained.";
       }
     }
   }
@@ -350,20 +330,17 @@ class CognitiveEngineProvider extends ChangeNotifier {
     if (_safteState.effectiveness >= _optimalSafteThreshold) {
       _targetSegmentSeconds = _optimalSegmentMinutes * 60;
     } else {
-      // Linear scaling between 25 and 52 minutes based on effectiveness
       final double scaling =
           (_safteState.effectiveness - _inhibitedSafteThreshold) /
           _safteRangeDivisor;
       final int calculatedMinutes =
           (_baseSegmentMinutes + (_segmentScalingFactor * scaling)).toInt();
 
-      // Safety clamp: ensures Focus segments never drop below 15 minutes due to extreme fatigue
       final int safeMinutes = math.max(15, calculatedMinutes);
       _targetSegmentSeconds = safeMinutes * 60;
     }
   }
 
-  /// Resets daily limits if the clock passes midnight
   void _checkMidnightRollover() {
     if (_internalClock.day != _currentDay) {
       _dailyWorkedSeconds = 0;
@@ -371,16 +348,11 @@ class CognitiveEngineProvider extends ChangeNotifier {
     }
   }
 
-  /// Triggered by the User pressing "START BREAK"
   void manualTransitionToBreak() {
     final int calculatedBreakSeconds =
         (_elapsedFocusSeconds * _breakDurationRatio).toInt();
 
-    // Safety clamp: prevents useless breaks of just a few seconds if user interrupts early
-    _targetBreakSeconds = math.max(
-      300,
-      calculatedBreakSeconds,
-    ); // Minimum 5 minutes
+    _targetBreakSeconds = math.max(300, calculatedBreakSeconds);
 
     _elapsedBreakSeconds = 0;
     _biometrics.window1Min.clear();
@@ -392,7 +364,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Triggered by the User pressing "RESUME SESSION"
   void manualTransitionToFocus() {
     _calculateNextSegmentDuration();
     _elapsedFocusSeconds = 0;
@@ -413,7 +384,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
     Future.delayed(const Duration(seconds: 2), endSession);
   }
 
-  /// Force-stops the session and initiates routing to the Report Page
   void endSession() {
     _ticker.start(const Duration(minutes: idleTickMinutes));
     _currentState = EngineState.sessionEnded;
@@ -426,17 +396,11 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _ticker.dispose();
     super.dispose();
   }
-  
+
   // SYSTEM RESET (For Logout)
-  // ==========================================
-  /// Esegue una pulizia profonda del motore cognitivo.
-  /// Riporta la macchina a stati su 'idle' e azzera tutti i contatori e le metriche.
-  /// Da chiamare OBBLIGATORIAMENTE durante il logout per non inquinare la sessione successiva.
   void resetEngine() {
-    // 1. Spegniamo la sessione attiva e rallentiamo il Ticker al ritmo di background
     _currentState = EngineState.idle;
     _ticker.start(const Duration(minutes: idleTickMinutes));
-    // 2. Azzeramento dei contatori temporali
     _targetSegmentSeconds = 0;
     _targetBreakSeconds = 0;
     _elapsedFocusSeconds = 0;
@@ -444,13 +408,10 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _dailyWorkedSeconds = 0;
     _breakExtensions = 0;
     _sessionTotalFocusSeconds = 0;
-    // 3. Reset dei messaggi e dei flag di stato
     _isBreakRecommended = false;
     _isFocusRecommended = false;
     _advisoryMessage = "";
-    // 4. Pulizia profonda del motore biometrico (fondamentale per le medie cardiache)
     _biometrics.resetSession();
-    // 5. Ripristino del SAFTE a valori "vergini" per evitare picchi grafici errati al login
     _internalClock = DateTime.now();
     _wakeupTime = _internalClock.subtract(const Duration(hours: 2));
     _currentDay = _internalClock.day;
@@ -460,8 +421,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
       circadianValue: 0.0,
       timestamp: _internalClock,
     );
-    hrTimeline.clear(); // 6. Pulizia della timeline del battito cardiaco
-    // 6. Aggiorniamo la UI affinché si svuoti
+    hrTimeline.clear();
     notifyListeners();
   }
 }
