@@ -32,6 +32,9 @@ class BiometricAnalyzer {
       []; // New 3-minute window for m-out-of-n density
   final List<double> _window1Min = [];
 
+  // Moving window for steps (Task Abandonment / AFK)
+  final List<int> _stepsWindow1Min = [];
+
   // Public getters required by the Cognitive Provider
   List<double> get window1Min => _window1Min;
   List<double> get window10Min => _window10Min;
@@ -45,16 +48,20 @@ class BiometricAnalyzer {
     _window10Min.clear();
     _window3Min.clear();
     _window1Min.clear();
+    _stepsWindow1Min.clear();
     rawSigmaBase = double.infinity;
   }
 
-  /// Ingests a new Heart Rate data point and maintains the sliding windows sizes.
-  void addDataPoint(double hr, int elapsedFocusSeconds) {
+  /// Ingests a new Heart Rate and Steps data point and maintains the sliding windows sizes.
+  void addDataPoint(double hr, int steps, int elapsedFocusSeconds) {
     _window1Min.add(hr);
     if (_window1Min.length > _oneMinTicks) _window1Min.removeAt(0);
 
     _window3Min.add(hr);
     if (_window3Min.length > _threeMinTicks) _window3Min.removeAt(0);
+
+    _stepsWindow1Min.add(steps);
+    if (_stepsWindow1Min.length > _oneMinTicks) _stepsWindow1Min.removeAt(0);
 
     // Only collect baseline data during the first 10 minutes of Focus Mode
     if (elapsedFocusSeconds <= 600) {
@@ -126,5 +133,20 @@ class BiometricAnalyzer {
         _window1Min.reduce((a, b) => a + b) / _window1Min.length;
     final double zScore = (windowAvg - muBase) / sigmaBase;
     return zScore > 1.0; // Incomplete recovery threshold
+  }
+
+  // ==========================================
+  // AFK & STEPS LOGIC
+  // ==========================================
+
+  /// Returns the total steps accumulated in the last minute
+  int get stepsLastMinute {
+    if (_stepsWindow1Min.isEmpty) return 0;
+    return _stepsWindow1Min.reduce((a, b) => a + b);
+  }
+
+  /// Clears the step window when the user manually resumes the session
+  void clearSteps() {
+    _stepsWindow1Min.clear();
   }
 }

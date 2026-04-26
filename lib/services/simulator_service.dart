@@ -40,12 +40,12 @@ class WarpTickerService {
 }
 
 // --- GENERATORE DI SCENARI ---
-// Aggiunto 'testMOutOfN' per testare rigorosamente il failsafe dell'anello
 enum SimulationScenario {
   optimalFlow,
   acuteStress,
   incompleteRecovery,
   testMOutOfN,
+  testTaskAbandonment, // Aggiunto per testare i passi
 }
 
 class ScenarioSimulator {
@@ -56,7 +56,7 @@ class ScenarioSimulator {
     rand = Random(seed);
   }
 
-  // Calcola il battito cardiaco in base alla situazione
+  // Calcola il battito cardiaco
   double getSimulatedHR(
     int elapsedFocusSeconds,
     int elapsedBreakSeconds,
@@ -70,27 +70,18 @@ class ScenarioSimulator {
       }
     }
 
-    // SCENARIO DI TEST RIGOROSO: m-out-of-n
     if (currentScenario == SimulationScenario.testMOutOfN) {
-      // 1. Minuto 0 - 25: Calma piatta (Baseline circa 65 bpm)
       if (elapsedFocusSeconds < 1500) {
         return 63.0 + rand.nextInt(5);
-      }
-      // 2. Minuto 25 - 26: Falso allarme / Sospirone (Sale a ~75 bpm)
-      else if (elapsedFocusSeconds >= 1500 && elapsedFocusSeconds < 1560) {
+      } else if (elapsedFocusSeconds >= 1500 && elapsedFocusSeconds < 1560) {
         return 73.0 + rand.nextInt(4);
-      }
-      // 3. Minuto 26 - 40: Ritorno alla normalità (Il sistema deve raffreddarsi)
-      else if (elapsedFocusSeconds >= 1560 && elapsedFocusSeconds < 2400) {
+      } else if (elapsedFocusSeconds >= 1560 && elapsedFocusSeconds < 2400) {
         return 63.0 + rand.nextInt(5);
-      }
-      // 4. Minuto 40 in poi: Sovraccarico reale continuo (Sale a ~78 bpm fissi)
-      else {
+      } else {
         return 76.0 + rand.nextInt(4);
       }
     }
 
-    // Scenari originali (mantenuti per retrocompatibilità)
     if (currentScenario == SimulationScenario.optimalFlow) {
       return 65.0 + rand.nextInt(5);
     } else if (currentScenario == SimulationScenario.acuteStress) {
@@ -104,8 +95,15 @@ class ScenarioSimulator {
     return 65.0;
   }
 
-  // Nessun movimento simulato, così testiamo solo lo stress cognitivo
-  int getSimulatedSteps() {
-    return 0;
+  // Raw step data evaluated once per minute
+  int getSimulatedSteps(int elapsedFocusSeconds) {
+    if (currentScenario == SimulationScenario.testTaskAbandonment) {
+      // Simula una camminata tra il minuto 1 e il minuto 3. 
+      // Al minuto 3 l'utente si risiede (passi = 0) per testare l'auto-resume.
+      if (elapsedFocusSeconds >= 60 && elapsedFocusSeconds < 180) {
+        return 18; // > 10 innesca lo stato AFK
+      }
+    }
+    return 0; // Seduto alla scrivania
   }
 }
