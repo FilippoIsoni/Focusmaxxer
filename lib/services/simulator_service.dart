@@ -12,36 +12,27 @@ class WarpTickerService {
 
   // Avvia il timer finto
   void start(Duration interval) {
-    stop(); // Ferma eventuali timer precedenti
+    stop();
 
-    // Calcoliamo quanti millisecondi deve durare il timer compresso
     int realMilliseconds = interval.inMilliseconds;
     int fakeMilliseconds = (realMilliseconds / speedMultiplier).round();
 
-    // Sicurezza per non far esplodere il telefono se il numero va a zero
-    if (fakeMilliseconds < 1) {
-      fakeMilliseconds = 1;
-    }
+    if (fakeMilliseconds < 1) fakeMilliseconds = 1;
 
-    // Facciamo partire il timer
     timer = Timer.periodic(Duration(milliseconds: fakeMilliseconds), (_) {
-      // Se la "radio" è ancora accesa, manda il segnale
-      if (controller.isClosed == false) {// Se il controller è ancora aperto, manda un segnale
-        controller.add(null); // per ogni tick del timer il controller emette un segnale
-        // per poter notificare la Cognitive Engine che è passato del tempo
+      if (controller.isClosed == false) {
+        controller.add(null);
       }
     });
   }
 
-  // Ferma il timer
   void stop() {
     if (timer != null) {
-      timer!.cancel();// punto esclamativo segnala che so per certo che timer non è null
+      timer!.cancel();
       timer = null;
     }
   }
 
-  // Spegne tutto
   void dispose() {
     stop();
     controller.close();
@@ -49,48 +40,72 @@ class WarpTickerService {
 }
 
 // --- GENERATORE DI SCENARI ---
-enum SimulationScenario { optimalFlow, acuteStress, incompleteRecovery }
+// Aggiunto 'testMOutOfN' per testare rigorosamente il failsafe dell'anello
+enum SimulationScenario {
+  optimalFlow,
+  acuteStress,
+  incompleteRecovery,
+  testMOutOfN,
+}
 
 class ScenarioSimulator {
   SimulationScenario currentScenario;
   late Random rand;
 
-  // Costruttore
   ScenarioSimulator(this.currentScenario, {int? seed}) {
     rand = Random(seed);
   }
 
   // Calcola il battito cardiaco in base alla situazione
-  double getSimulatedHR(int elapsedFocusSeconds, int elapsedBreakSeconds, bool isBreak) {
-    
-    // CASO 1: L'utente è in pausa
-    if (isBreak == true) {
+  double getSimulatedHR(
+    int elapsedFocusSeconds,
+    int elapsedBreakSeconds,
+    bool isBreak,
+  ) {
+    if (isBreak) {
       if (currentScenario == SimulationScenario.incompleteRecovery) {
-        return 85.0 + rand.nextInt(10); // Battito resta alto (Stress)
+        return 85.0 + rand.nextInt(10);
       } else {
-        return 60.0 + rand.nextInt(5); // Recupero normale e sano
+        return 60.0 + rand.nextInt(5);
       }
     }
 
-    // CASO 2: L'utente sta studiando (Focus)
-    if (currentScenario == SimulationScenario.optimalFlow) {
-      return 65.0 + rand.nextInt(5); // Studio sereno e costante
-      
-    } else if (currentScenario == SimulationScenario.acuteStress) {
-      // Se stiamo simulando uno stress acuto e siamo tra il minuto 15 e 20
-      if (elapsedFocusSeconds > 900 && elapsedFocusSeconds < 1200) {
-        return 115.0 + rand.nextInt(10); // Il battito schizza in alto!
-      } else {
-        return 70.0 + rand.nextInt(8); // Resto della sessione normale
+    // SCENARIO DI TEST RIGOROSO: m-out-of-n
+    if (currentScenario == SimulationScenario.testMOutOfN) {
+      // 1. Minuto 0 - 25: Calma piatta (Baseline circa 65 bpm)
+      if (elapsedFocusSeconds < 1500) {
+        return 63.0 + rand.nextInt(5);
       }
-      
-    } else {
-      return 65.0; // Valore di sicurezza se qualcosa va storto
+      // 2. Minuto 25 - 26: Falso allarme / Sospirone (Sale a ~75 bpm)
+      else if (elapsedFocusSeconds >= 1500 && elapsedFocusSeconds < 1560) {
+        return 73.0 + rand.nextInt(4);
+      }
+      // 3. Minuto 26 - 40: Ritorno alla normalità (Il sistema deve raffreddarsi)
+      else if (elapsedFocusSeconds >= 1560 && elapsedFocusSeconds < 2400) {
+        return 63.0 + rand.nextInt(5);
+      }
+      // 4. Minuto 40 in poi: Sovraccarico reale continuo (Sale a ~78 bpm fissi)
+      else {
+        return 76.0 + rand.nextInt(4);
+      }
     }
+
+    // Scenari originali (mantenuti per retrocompatibilità)
+    if (currentScenario == SimulationScenario.optimalFlow) {
+      return 65.0 + rand.nextInt(5);
+    } else if (currentScenario == SimulationScenario.acuteStress) {
+      if (elapsedFocusSeconds > 900 && elapsedFocusSeconds < 1200) {
+        return 115.0 + rand.nextInt(10);
+      } else {
+        return 70.0 + rand.nextInt(8);
+      }
+    }
+
+    return 65.0;
   }
 
-  // Passi simulati: sempre fermo sulla sedia a studiare
+  // Nessun movimento simulato, così testiamo solo lo stress cognitivo
   int getSimulatedSteps() {
-    return 0; 
+    return 0;
   }
 }

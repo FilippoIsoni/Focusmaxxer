@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'services/impact_api_service.dart';
 import 'services/simulator_service.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';// Aggiunto per la memoria
+import 'package:shared_preferences/shared_preferences.dart'; // Aggiunto per la memoria
 
 import 'providers/auth_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
@@ -40,10 +40,14 @@ class FocusMaxxerApp extends StatelessWidget {
         ChangeNotifierProxyProvider<WarpTickerService, CognitiveEngineProvider>(
           create: (context) => CognitiveEngineProvider(
             context.read<WarpTickerService>(),
-            scenario: SimulationScenario.optimalFlow,
+            scenario: SimulationScenario.testMOutOfN,
           ),
           update: (context, ticker, previousEngine) =>
-              previousEngine ?? CognitiveEngineProvider(ticker),
+              previousEngine ??
+              CognitiveEngineProvider(
+                ticker,
+                scenario: SimulationScenario.testMOutOfN,
+              ),
         ),
 
         // 4. Authentication State Manager (CRITICAL FIX: Added missing provider)
@@ -141,7 +145,6 @@ class FocusMaxxerApp extends StatelessWidget {
   }
 }
 
-
 /// AppEntryGate Widget: Determines the initial screen based on authentication status.
 class AppEntryGate extends StatelessWidget {
   const AppEntryGate({super.key});
@@ -151,7 +154,7 @@ class AppEntryGate extends StatelessWidget {
     // Il FutureBuilder gestisce l'attesa per noi!
     return FutureBuilder<SharedPreferences>(
       // 1. Diamo in pasto l'operazione lenta (leggere la memoria)
-      future: SharedPreferences.getInstance(), 
+      future: SharedPreferences.getInstance(),
       builder: (context, snapshot) {
         // 2. MENTRE ASPETTA: Mostra la rotellina automaticamente
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -174,11 +177,12 @@ class AppEntryGate extends StatelessWidget {
         }
 
         // 4. Se c'è stato un errore strano di sistema
-        return const LoginPage(); 
+        return const LoginPage();
       },
     );
   }
 }
+
 /// Bootloader Widget: Blocks UI access until biological parameters are fetched from the server.
 /// Ensures the CognitiveEngine is fully calibrated before the user reaches the Dashboard.
 class ClinicalBootloader extends StatefulWidget {
