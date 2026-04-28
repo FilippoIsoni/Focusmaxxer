@@ -51,8 +51,11 @@ class SafteSemanticInterpreter {
     return 'Slump';
   }
 
-  static String getInertiaStatus(double effectiveness, double reservoirRatio) {
-    if (effectiveness < 90.0 && reservoirRatio > 0.9) return 'Active';
+  static String getInertiaStatus(DateTime wakeupTime) {
+    final int awakeMinutes = DateTime.now().difference(wakeupTime).inMinutes;
+    if (awakeMinutes < 15) return 'Severe';
+    if (awakeMinutes < 60) return 'Active';
+    if (awakeMinutes < 120) return 'Fading';
     return 'Cleared';
   }
 }
@@ -369,8 +372,7 @@ class _KeyFactorsSection extends StatelessWidget {
           title: 'Sleep Inertia',
           description: 'Post-awakening cognitive penalty.',
           statusLabel: SafteSemanticInterpreter.getInertiaStatus(
-            safte.effectiveness,
-            reservoirRatio,
+            engine.wakeupTime,
           ),
           statusColor: theme.colorScheme.secondary,
         ),

@@ -133,6 +133,8 @@ class CognitiveEngineProvider extends ChangeNotifier
     return 0;
   }
 
+  DateTime get wakeupTime => _wakeupTime;
+
   // ==========================================
   // INITIALIZATION & LIFECYCLE
   // ==========================================
