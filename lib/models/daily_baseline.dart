@@ -2,11 +2,13 @@ class DailyBaseline {
   final double sleepEfficiency;
   final DateTime bedTime; // 'startTime' dal wearable
   final DateTime wakeupTime; // 'endTime' dal wearable
+  final bool mainSleep;
 
   const DailyBaseline({
     required this.sleepEfficiency,
     required this.bedTime,
     required this.wakeupTime,
+    required this.mainSleep,
   });
 
   factory DailyBaseline.fromJson(Map<String, dynamic> json) {
@@ -18,6 +20,7 @@ class DailyBaseline {
       wakeupTime:
           DateTime.tryParse(json['endTime']?.toString() ?? '') ??
           DateTime.now().subtract(const Duration(hours: 2)),
+      mainSleep: json['mainSleep'] as bool? ?? true,
     );
   }
 }

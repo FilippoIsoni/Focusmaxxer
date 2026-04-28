@@ -8,7 +8,7 @@ class SafteEngine {
   // --- Constants & Physiological Limits ---
   static const double maxReservoirCapacity =
       2880.0; // 48 hours of optimal cognitive reserve
-  static const double depletionRatePerMinute = 1.0;
+  static const double depletionRatePerMinute = 0.5;
 
   // Circadian Harmonics Parameters
   static const double _primaryHarmonicPeriod = 24.0;
@@ -43,7 +43,7 @@ class SafteEngine {
       final int minutesAwake = currentSleep.bedTime
           .difference(lastWakeupTime)
           .inMinutes;
-      if (minutesAwake > 1440 || minutesAwake < 0) {
+      if (minutesAwake > 2880 || minutesAwake < 0) {
         // Gap > 24h or negative sync error: Reset to standard baseline
         reservoirAtBedtime =
             maxReservoirCapacity - (depletionRatePerMinute * 16 * 60);
@@ -99,42 +99,6 @@ class SafteEngine {
               (tHours - _secondaryHarmonicPhaseOffset),
         );
     return primaryHarmonic + secondaryHarmonic;
-  }
-
-  /// Calculates the Homeostatic Reservoir upon waking up.
-  /// Simulates sleep recovery minute-by-minute using an asymptotic integration
-  /// modulated by the circadian sleep propensity (SP) and sleep debt (SD).
-  static double computeWakeupReservoir({
-    required double previousReservoir,
-    required int sleepMinutes,
-    required double sleepEfficiency,
-    required DateTime wakeupTime,
-  }) {
-    final double normalizedSE = sleepEfficiency > 1.0
-        ? sleepEfficiency / 100.0
-        : sleepEfficiency;
-    double currentR = previousReservoir;
-    final DateTime bedTime = wakeupTime.subtract(
-      Duration(minutes: sleepMinutes),
-    );
-
-    // Minute-by-minute integration of the sleep recovery function
-    for (int minute = 0; minute < sleepMinutes; minute++) {
-      final DateTime currentMinuteTime = bedTime.add(Duration(minutes: minute));
-      final double tHours =
-          currentMinuteTime.hour + (currentMinuteTime.minute / 60.0);
-
-      final double c = _computeCircadianModulator(tHours);
-      final double sd = _sleepDebtFactor * (maxReservoirCapacity - currentR);
-      final double sp = -_circadianSleepWeight * c;
-
-      // Theoretical Sleep Intensity bounded between 0.0 and 3.4
-      final double si = math.max(0.0, math.min(sd + sp, _maxSleepIntensity));
-
-      currentR = math.min(maxReservoirCapacity, currentR + (si * normalizedSE));
-    }
-
-    return currentR;
   }
 
   /// Calculates the exact cognitive state at any given absolute time during wakefulness.
