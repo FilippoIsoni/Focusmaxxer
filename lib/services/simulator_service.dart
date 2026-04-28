@@ -45,7 +45,7 @@ enum SimulationScenario {
   acuteStress,
   incompleteRecovery,
   testMOutOfN,
-  testTaskAbandonment, // Aggiunto per testare i passi
+  testTaskAbandonment,
 }
 
 class ScenarioSimulator {

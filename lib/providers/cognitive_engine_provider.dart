@@ -220,10 +220,12 @@ class CognitiveEngineProvider extends ChangeNotifier
         _fastForwardEngine(virtualMissedSeconds);
         _lastBackgroundTime = null;
       }
+      bool isLowFrequencyState =
+          _currentState == EngineState.idle ||
+          _currentState == EngineState.sessionEnded ||
+          _currentState == EngineState.dailyLimitReached;
       _ticker.start(
-        Duration(
-          seconds: _currentState == EngineState.idle ? 60 : tickDurationSeconds,
-        ),
+        Duration(seconds: isLowFrequencyState ? 60 : tickDurationSeconds),
       );
     }
   }
@@ -422,28 +424,40 @@ class CognitiveEngineProvider extends ChangeNotifier
   }
 
   void _handleBreakMode({required bool isFastForwarding}) {
+    // Salviamo il valore prima dell'incremento
+    final int previousElapsed = _elapsedBreakSeconds;
     _elapsedBreakSeconds += tickDurationSeconds;
 
-    if (_elapsedBreakSeconds >= _targetBreakSeconds) {
-      if (_biometrics.isRecoveryIncomplete()) {
-        if (!_isFocusRecommended && !isFastForwarding) {
-          _triggerDoubleVibration();
-        }
-        _advisoryMessage = "Vagal tone altered. Break automatically extended.";
-        _isFocusRecommended = false;
+    // Trigger logico: scatta SOLO nel tick in cui scavalchiamo il target
+    bool justCrossedTarget =
+        previousElapsed < _targetBreakSeconds &&
+        _elapsedBreakSeconds >= _targetBreakSeconds;
 
+    if (justCrossedTarget) {
+      if (_biometrics.isRecoveryIncomplete()) {
         if (_breakExtensions < _maxBreakExtensions) {
+          // Estendiamo il target (il sistema si resetta automaticamente per il prossimo attraversamento)
           _targetBreakSeconds += _breakExtensionSeconds;
           _breakExtensions++;
+
+          _advisoryMessage =
+              "Vagal tone altered. Break automatically extended.";
+          if (!isFastForwarding) _triggerDoubleVibration();
+        } else {
+          // Limite massimo raggiunto
+          _isFocusRecommended = false;
+          _advisoryMessage =
+              "Maximum break reached. Recovery still incomplete.";
+          if (!isFastForwarding) _triggerDoubleVibration();
         }
       } else {
-        if (!_isFocusRecommended && !isFastForwarding) {
-          _triggerDoubleVibration();
-        }
-        _advisoryMessage = "Vagal tone restored. Ready for Deep Focus.";
+        // Recupero completato con successo
         _isFocusRecommended = true;
+        _advisoryMessage = "Vagal tone restored. Ready for Deep Focus.";
+        if (!isFastForwarding) _triggerDoubleVibration();
       }
-    } else {
+    } else if (_elapsedBreakSeconds < _targetBreakSeconds) {
+      // Fase di attesa normale
       _advisoryMessage = "Fatigue clearance in progress...";
     }
   }
@@ -533,6 +547,13 @@ class CognitiveEngineProvider extends ChangeNotifier
     _tickSubscription?.cancel();
     _ticker.dispose();
     super.dispose();
+  }
+
+  void finalizeSession() {
+    _currentState = EngineState.idle;
+    // Riporta il ticker a una frequenza bassa per la dashboard
+    _ticker.start(const Duration(minutes: idleTickMinutes));
+    notifyListeners();
   }
 
   void resetEngine() {
