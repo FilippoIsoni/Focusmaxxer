@@ -146,12 +146,14 @@ class CognitiveEngineProvider extends ChangeNotifier
     _internalClock = DateTime.now();
     _wakeupTime = _internalClock.subtract(const Duration(hours: 2));
 
-    _safteState = SafteState(
-      effectiveness: 100.0,
-      reservoir: SafteEngine.maxReservoirCapacity,
-      circadianValue: 0.0,
-      timestamp: _internalClock,
-    );
+// Forzatura test: partiamo sempre con un risveglio 2 ore fa al massimo
+    //_lastWakeupTime = _wakeupTime.subtract(const Duration(hours: 24));
+    //_lastWakeupReservoir = SafteEngine.maxReservoirCapacity;
+
+    _baselineReservoir = SafteEngine.maxReservoirCapacity; // Set initial baseline
+
+    // Compute the true state based on waking up 2 hours ago
+    _updateSafteState();
 
     _tickSubscription = _ticker.controller.stream.listen((_) {
       if (_currentState == EngineState.idle) {
@@ -260,24 +262,24 @@ class CognitiveEngineProvider extends ChangeNotifier
     DailyBaseline baseline, {
     int restoredWorkedSeconds = 0,
   }) {
+    // ---------------------------------------------------------
+    // FORZATURA TEST: Ignoriamo il sonno di ieri e partiamo al 100%
+    // ---------------------------------------------------------
+    //_baselineReservoir = SafteEngine.maxReservoirCapacity;
+    //_dailyWorkedSeconds = restoredWorkedSeconds;
     final bool isNewSleepCycle = _wakeupTime != baseline.wakeupTime;
-
     if (isNewSleepCycle) {
-      // Calculate the new R based on the chain of events
       _baselineReservoir = SafteEngine.calculateCurrentWakeupReservoir(
         lastWakeupReservoir: _lastWakeupReservoir,
         lastWakeupTime: _lastWakeupTime,
         currentSleep: baseline,
       );
-
-      // Update the state anchors for tomorrow's calculation
       _lastWakeupReservoir = _baselineReservoir;
       _lastWakeupTime = baseline.wakeupTime;
       _dailyWorkedSeconds = 0;
     } else {
       _dailyWorkedSeconds = restoredWorkedSeconds;
     }
-
     _wakeupTime = baseline.wakeupTime;
     _internalClock = DateTime.now();
 
@@ -644,12 +646,8 @@ class CognitiveEngineProvider extends ChangeNotifier
     _biometrics.resetSession();
     _internalClock = DateTime.now();
     _wakeupTime = _internalClock.subtract(const Duration(hours: 2));
-    _safteState = SafteState(
-      effectiveness: 100.0,
-      reservoir: SafteEngine.maxReservoirCapacity,
-      circadianValue: 0.0,
-      timestamp: _internalClock,
-    );
+    _baselineReservoir = SafteEngine.maxReservoirCapacity; // Set initial baseline
+    _updateSafteState();
     hrTimeline.clear();
     notifyListeners();
   }
