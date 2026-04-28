@@ -98,9 +98,9 @@ class ScenarioSimulator {
   // Passi simulati per ogni 5 secondi di tick
   int getSimulatedSteps(int elapsedFocusSeconds) {
     if (currentScenario == SimulationScenario.testTaskAbandonment) {
-      // Simula una camminata tra il minuto 1 e il minuto 3. 
+      // Simula una camminata tra il minuto 1 e il minuto 3.
       // Al minuto 3 l'utente si risiede (passi = 0) per testare l'auto-resume.
-      if (elapsedFocusSeconds >= 60 && elapsedFocusSeconds < 180) {
+      if (elapsedFocusSeconds >= 240 && elapsedFocusSeconds < 360) {
         return 2; // > 10 innesca lo stato AFK
       }
     }

@@ -40,13 +40,13 @@ class FocusMaxxerApp extends StatelessWidget {
         ChangeNotifierProxyProvider<WarpTickerService, CognitiveEngineProvider>(
           create: (context) => CognitiveEngineProvider(
             context.read<WarpTickerService>(),
-            scenario: SimulationScenario.testMOutOfN,
+            scenario: SimulationScenario.testTaskAbandonment,
           ),
           update: (context, ticker, previousEngine) =>
               previousEngine ??
               CognitiveEngineProvider(
                 ticker,
-                scenario: SimulationScenario.testMOutOfN,
+                scenario: SimulationScenario.testTaskAbandonment,
               ),
         ),
 
