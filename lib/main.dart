@@ -212,12 +212,15 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
     try {
       final api = context.read<ImpactApiService>();
       final engine = context.read<CognitiveEngineProvider>();
+      final analytics = context.read<AnalyticsProvider>();
 
-      // 1. Fetch sleep data from Impact API
       final baseline = await api.fetchMorningBaseline();
 
-      // 2. Calibrate the SAFTE engine
-      engine.initializeBaseline(baseline);
+      // Secure injection: Passes data from persistence to prevent daily limit bypass
+      engine.initializeBaseline(
+        baseline,
+        restoredWorkedSeconds: analytics.todayFocusSeconds,
+      );
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

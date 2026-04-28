@@ -45,12 +45,18 @@ class CognitiveEngineProvider extends ChangeNotifier
   static const int tickDurationSeconds = 5;
   static const int idleTickMinutes = 1;
 
-  static const double _optimalSafteThreshold = 90.0;
-  static const double _inhibitedSafteThreshold = 77.0;
+  static const double _inhibitedSafteThreshold = 65.0; // Clinical block
+  static const double _warningSafteThreshold =
+      77.0; // Adaptive degradation threshold
+  static const double _optimalSafteThreshold =
+      90.0; // Peak performance threshold
+
   static const int _optimalSegmentMinutes = 52;
-  static const int _baseSegmentMinutes = 25;
-  static const double _segmentScalingFactor = 27.0;
-  static const double _safteRangeDivisor = 13.0;
+  static const int _optimalBreakMinutes = 17;
+  static const int _warningSegmentMinutes = 25;
+  static const int _warningBreakMinutes = 5;
+
+  double _baselineReservoir = SafteEngine.maxReservoirCapacity;
 
   static const double _breakDurationRatio = 0.33;
   static const int _breakExtensionSeconds = 300;
@@ -83,6 +89,10 @@ class CognitiveEngineProvider extends ChangeNotifier
   int _secondsSinceLastStepCheck = 0;
 
   final List<Map<String, dynamic>> hrTimeline = [];
+
+  // Persistent Markov state (null means "First boot" or "No data")
+  double? _lastWakeupReservoir;
+  DateTime? _lastWakeupTime;
 
   // ==========================================
   // PUBLIC GETTERS
@@ -246,24 +256,32 @@ class CognitiveEngineProvider extends ChangeNotifier
     _scenarioSimulator = ScenarioSimulator(newScenario);
   }
 
-  void initializeBaseline(DailyBaseline baseline) {
-    _wakeupTime = baseline.wakeupTime;
-    _internalClock = DateTime.now();
-    _dailyWorkedSeconds = 0;
+  void initializeBaseline(
+    DailyBaseline baseline, {
+    int restoredWorkedSeconds = 0,
+  }) {
+    final bool isNewSleepCycle = _wakeupTime != baseline.wakeupTime;
 
-    double initialR = SafteEngine.maxReservoirCapacity;
-    if (baseline.sleepEfficiency < 85.0) {
-      initialR = math.max(
-        0.0,
-        initialR - ((85.0 - baseline.sleepEfficiency) * 10),
+    if (isNewSleepCycle) {
+      // Calculate the new R based on the chain of events
+      _baselineReservoir = SafteEngine.calculateCurrentWakeupReservoir(
+        lastWakeupReservoir: _lastWakeupReservoir,
+        lastWakeupTime: _lastWakeupTime,
+        currentSleep: baseline,
       );
+
+      // Update the state anchors for tomorrow's calculation
+      _lastWakeupReservoir = _baselineReservoir;
+      _lastWakeupTime = baseline.wakeupTime;
+      _dailyWorkedSeconds = 0;
+    } else {
+      _dailyWorkedSeconds = restoredWorkedSeconds;
     }
 
-    _safteState = SafteEngine.computeNextState(
-      currentR: initialR,
-      wakeupTime: _wakeupTime,
-      currentTime: _internalClock,
-    );
+    _wakeupTime = baseline.wakeupTime;
+    _internalClock = DateTime.now();
+
+    _updateSafteState();
     notifyListeners();
   }
 
@@ -467,30 +485,82 @@ class CognitiveEngineProvider extends ChangeNotifier
   // ==========================================
 
   void _updateSafteState() {
-    double currentR = SafteEngine.deplete(
-      _safteState.reservoir,
-      tickDurationSeconds,
-    );
-    _safteState = SafteEngine.computeNextState(
-      currentR: currentR,
+    _safteState = SafteEngine.computeStateAt(
+      reservoirAtWakeup: _baselineReservoir,
       wakeupTime: _wakeupTime,
-      currentTime: _internalClock,
+      targetTime: _internalClock,
     );
   }
 
+  /// Calculates the next segment and break durations using the SAFTE baseline
+  /// and a Look-ahead algorithm for real-time adjustments.
   void _calculateNextSegmentDuration() {
-    if (_safteState.effectiveness >= _optimalSafteThreshold) {
-      _targetSegmentSeconds = _optimalSegmentMinutes * 60;
-    } else {
-      final double scaling =
-          (_safteState.effectiveness - _inhibitedSafteThreshold) /
-          _safteRangeDivisor;
-      final int calculatedMinutes =
-          (_baseSegmentMinutes + (_segmentScalingFactor * scaling)).toInt();
+    final double currentE = _safteState.effectiveness;
 
-      final int safeMinutes = math.max(15, calculatedMinutes);
-      _targetSegmentSeconds = safeMinutes * 60;
+    // 1. Clinical Block: Restorative sleep required
+    if (currentE < _inhibitedSafteThreshold) {
+      _targetSegmentSeconds = 15 * 60; // Absolute minimum survival segment
+      _targetBreakSeconds = 5 * 60;
+      return;
     }
+
+    // 2. Base Duration Interpolation (Using 90.0 and 77.0 thresholds)
+    int baseFocusMinutes;
+    if (currentE >= _optimalSafteThreshold) {
+      baseFocusMinutes = _optimalSegmentMinutes;
+    } else if (currentE <= _warningSafteThreshold) {
+      baseFocusMinutes = _warningSegmentMinutes;
+    } else {
+      // Linear interpolation for effectiveness between 77% and 90%
+      final double ratio =
+          (currentE - _warningSafteThreshold) /
+          (_optimalSafteThreshold - _warningSafteThreshold);
+      baseFocusMinutes =
+          _warningSegmentMinutes +
+          (ratio * (_optimalSegmentMinutes - _warningSegmentMinutes)).round();
+    }
+
+    int focusMinutes = baseFocusMinutes;
+
+    // 3. SAFTE Prediction Curve (Look-ahead)
+    // Project biological state forward to prevent mid-session crashes.
+    for (int futureMin = 1; futureMin <= baseFocusMinutes; futureMin++) {
+      final projectedTime = _internalClock.add(Duration(minutes: futureMin));
+      final projectedState = SafteEngine.computeStateAt(
+        reservoirAtWakeup: _baselineReservoir,
+        wakeupTime: _wakeupTime,
+        targetTime: projectedTime,
+      );
+
+      // If effectiveness plummets during the planned segment, truncate it
+      if (projectedState.effectiveness <= _warningSafteThreshold) {
+        focusMinutes = math.max(_warningSegmentMinutes, futureMin - 1);
+        break;
+      }
+    }
+
+    // 4. Daily Cognitive Cap Clipping
+    final int remainingDailySeconds = dailyMaxSeconds - _dailyWorkedSeconds;
+    _targetSegmentSeconds = math.min(focusMinutes * 60, remainingDailySeconds);
+
+    // 5. Break Interpolation (Proportional to the actual assigned focus time)
+    final int actualFocusMinutes = _targetSegmentSeconds ~/ 60;
+    int breakMinutes;
+
+    if (actualFocusMinutes >= _optimalSegmentMinutes) {
+      breakMinutes = _optimalBreakMinutes;
+    } else if (actualFocusMinutes <= _warningSegmentMinutes) {
+      breakMinutes = _warningBreakMinutes;
+    } else {
+      final double breakRatio =
+          (actualFocusMinutes - _warningSegmentMinutes) /
+          (_optimalSegmentMinutes - _warningSegmentMinutes);
+      breakMinutes =
+          _warningBreakMinutes +
+          (breakRatio * (_optimalBreakMinutes - _warningBreakMinutes)).round();
+    }
+
+    _targetBreakSeconds = breakMinutes * 60;
   }
 
   void manualTransitionToBreak() {
