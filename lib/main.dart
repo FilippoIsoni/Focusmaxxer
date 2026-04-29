@@ -213,21 +213,25 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
 
     try {
       final api = context.read<ImpactApiService>();
-      // Leggiamo il SafteProvider invece del CognitiveEngine
       final safte = context.read<SafteProvider>(); 
+      final engine = context.read<CognitiveEngineProvider>(); // <-- Aggiungi il riferimento all'engine
 
-      // Scarica la Baseline dall'API
       final baseline = await api.fetchMorningBaseline();
 
-      // Sincronizziamo i dati biologici con il server
-      await safte.syncWithServer(
+      // Salva il risultato: True se ha dormito, False se no
+      bool isNewDay = await safte.syncWithServer(
         sWake: baseline.wakeupTime,
         sSleep: baseline.bedTime,
         sEff: baseline.sleepEfficiency,
         isMainSleep: baseline.mainSleep,
       );
       
-    } catch (e) {
+      // SE è un nuovo giorno, azzera i minuti di lavoro!
+      if (isNewDay) {
+        await engine.resetDailyWork();
+      }
+      
+    } catch (e) { 
       _errorMessage = e.toString();
     } finally {
       if (mounted) {

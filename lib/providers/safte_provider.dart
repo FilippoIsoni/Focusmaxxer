@@ -131,7 +131,7 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// È il cuore della logica di allineamento clinico.
   /// Da chiamare DOPO aver scaricato i dati dell'indossabile tramite le API.
   /// Verifica se c'è stato un nuovo ciclo di sonno e ricalcola il recupero.
-  Future<void> syncWithServer({
+  Future<bool> syncWithServer({
     required DateTime sWake,
     required DateTime sSleep,
     required double sEff,
@@ -173,15 +173,15 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       // Scrive permanentemente i nuovi dati sul telefono
       await persistCurrentState(prefs);
+      updateSafteState();
+      notifyListeners();
+      return true; // <-- AGGIUNGI QUESTO: Segnala che è un nuovo giorno!
     } else {
-      print(" SAFTE: Dati sincronizzati o sonno non principale.");
-    }
-
-    // Indipendentemente da cosa ha deciso, aggiorna i calcoli all'ora attuale
-    updateSafteState();
-    notifyListeners();
+      updateSafteState();
+      notifyListeners();
+      return false; // <-- AGGIUNGI QUESTO: Segnala che è lo stesso giorno, solo un aggiornamento 
+   }
   }
-
   // ==========================================
   // METODI DI UTILITA' INTERNA
   // ==========================================

@@ -596,4 +596,13 @@ class CognitiveEngineProvider extends ChangeNotifier with WidgetsBindingObserver
     // Il reset della sessione NON intacca più la biologia del sonno!
     notifyListeners();
   }
+  /// Azzera i minuti lavorati e aggiorna le SharedPreferences.
+  /// Da chiamare quando il SafteProvider rileva un nuovo ciclo di sonno.
+  Future<void> resetDailyWork() async {
+    _dailyWorkedSeconds = 0;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('worked_seconds', 0);
+    notifyListeners();
+    print("⏱️ Minuti di lavoro giornalieri azzerati per il nuovo giorno.");
+  }
 }//end of cognitive_engine_provider.dart
