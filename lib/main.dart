@@ -5,11 +5,12 @@ import 'package:provider/provider.dart';
 import 'services/impact_api_service.dart';
 import 'services/simulator_service.dart';
 
-import 'package:shared_preferences/shared_preferences.dart'; // Aggiunto per la memoria
+import 'package:shared_preferences/shared_preferences.dart'; 
 
 import 'providers/auth_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
 import 'providers/analytics_provider.dart';
+import 'providers/safte_provider.dart';
 
 import 'screens/onboarding_page.dart';
 import 'screens/login_page.dart';
@@ -36,22 +37,30 @@ class FocusMaxxerApp extends StatelessWidget {
           dispose: (_, service) => service.dispose(),
         ),
 
-        // 3. Central Cognitive Engine
-        ChangeNotifierProxyProvider<WarpTickerService, CognitiveEngineProvider>(
+        // 3. Orologio Biologico (Inizializzato prima del Cognitive Engine)
+        ChangeNotifierProvider<SafteProvider>(
+          create: (_) => SafteProvider(),
+        ),
+
+        // 3. Central Cognitive Engine (Dipende dal Ticker E dal SafteProvider)
+        ChangeNotifierProxyProvider2<WarpTickerService, SafteProvider, CognitiveEngineProvider>(
           create: (context) => CognitiveEngineProvider(
+            context.read<SafteProvider>(),
             context.read<WarpTickerService>(),
             scenario: SimulationScenario.optimalFlow,
           ),
-          update: (context, ticker, previousEngine) =>
+          update: (context, ticker, safte, previousEngine) =>
               previousEngine ??
               CognitiveEngineProvider(
+                safte,
                 ticker,
-                scenario: SimulationScenario.incompleteRecovery,
+                scenario: SimulationScenario.optimalFlow,
               ),
         ),
 
-        // 4. Authentication State Manager (CRITICAL FIX: Added missing provider)
+        // 4. Authentication State Manager 
         ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        
         // 5. Analytics Manager
         ChangeNotifierProvider<AnalyticsProvider>(
           create: (_) => AnalyticsProvider(),
@@ -151,12 +160,9 @@ class AppEntryGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Il FutureBuilder gestisce l'attesa per noi!
     return FutureBuilder<SharedPreferences>(
-      // 1. Diamo in pasto l'operazione lenta (leggere la memoria)
       future: SharedPreferences.getInstance(),
       builder: (context, snapshot) {
-        // 2. MENTRE ASPETTA: Mostra la rotellina automaticamente
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
@@ -164,19 +170,17 @@ class AppEntryGate extends StatelessWidget {
             ),
           );
         }
-        // 3. QUANDO HA FINITO: snapshot.data contiene le nostre preferenze!
+        
         if (snapshot.hasData) {
           final prefs = snapshot.data!;
           final isFirstTime = prefs.getBool('isFirstTime') ?? true;
           final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
-          // Decidiamo la pagina istantaneamente
           if (isFirstTime) return const OnboardingPage();
           if (isLoggedIn) return const ClinicalBootloader();
           return const LoginPage();
         }
 
-        // 4. Se c'è stato un errore strano di sistema
         return const LoginPage();
       },
     );
@@ -184,7 +188,6 @@ class AppEntryGate extends StatelessWidget {
 }
 
 /// Bootloader Widget: Blocks UI access until biological parameters are fetched from the server.
-/// Ensures the CognitiveEngine is fully calibrated before the user reaches the Dashboard.
 class ClinicalBootloader extends StatefulWidget {
   const ClinicalBootloader({super.key});
 
@@ -203,7 +206,6 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
   }
 
   Future<void> _fetchClinicalData() async {
-    // Reset state for retry attempts
     setState(() {
       _isInitializing = true;
       _errorMessage = '';
@@ -211,16 +213,20 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
 
     try {
       final api = context.read<ImpactApiService>();
-      final engine = context.read<CognitiveEngineProvider>();
-      final analytics = context.read<AnalyticsProvider>();
+      // Leggiamo il SafteProvider invece del CognitiveEngine
+      final safte = context.read<SafteProvider>(); 
 
+      // Scarica la Baseline dall'API
       final baseline = await api.fetchMorningBaseline();
 
-      // Secure injection: Passes data from persistence to prevent daily limit bypass
-      engine.initializeBaseline(
-        baseline,
-        restoredWorkedSeconds: analytics.todayFocusSeconds,
+      // Sincronizziamo i dati biologici con il server
+      await safte.syncWithServer(
+        sWake: baseline.wakeupTime,
+        sSleep: baseline.bedTime,
+        sEff: baseline.sleepEfficiency,
+        isMainSleep: baseline.mainSleep,
       );
+      
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -240,7 +246,6 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
       );
     }
 
-    // CRITICAL FIX: Interactive Error State with Retry Mechanism
     if (_errorMessage.isNotEmpty) {
       return Scaffold(
         body: Center(
@@ -290,4 +295,4 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
     // Initialization successful, proceed to the main Dashboard
     return const HomeDashboard();
   }
-}
+}//end of main.dart
