@@ -14,14 +14,9 @@ class AnalyticsProvider extends ChangeNotifier {
   // Calculates focus seconds strictly for the current calendar day
   int get todayFocusSeconds {
     final now = DateTime.now();
-    return _sessions
-        .where(
-          (s) =>
-              s.date.year == now.year &&
-              s.date.month == now.month &&
-              s.date.day == now.day,
-        )
-        .fold(0, (sum, s) => sum + s.durationSeconds);
+    return _sessions.where(
+          (s) => s.date.year == now.year && s.date.month == now.month && s.date.day == now.day,
+        ).fold(0, (sum, s) => sum + s.durationSeconds);
   }
 
   // Inserts a new session at the top of the list

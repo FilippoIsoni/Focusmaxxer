@@ -47,14 +47,14 @@ class FocusMaxxerApp extends StatelessWidget {
           create: (context) => CognitiveEngineProvider(
             context.read<SafteProvider>(),
             context.read<WarpTickerService>(),
-            scenario: SimulationScenario.optimalFlow,
+            scenario: SimulationScenario.acuteStress,
           ),
           update: (context, ticker, safte, previousEngine) =>
               previousEngine ??
               CognitiveEngineProvider(
                 safte,
                 ticker,
-                scenario: SimulationScenario.optimalFlow,
+                scenario: SimulationScenario.acuteStress,
               ),
         ),
 
