@@ -184,7 +184,112 @@ class _FocusModePageState extends State<FocusModePage> {
                 ),
               ),
 
-              if (engine.isAfkWarningActive)
+              if (engine.isCalibrationAnomaly)
+                Positioned.fill(
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                      child: Container(
+                        color: Colors.black.withAlpha(180),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32.0,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.redAccent,
+                                  size: 72,
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  "CALIBRATION FAILED",
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineSmall
+                                      ?.copyWith(
+                                        color: Colors.redAccent,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 2.0,
+                                      ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  "Anomalous condition detected.\nPlease do not move or use the phone during the baseline calibration phase.",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 16,
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 48),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                    onPressed: () {
+                                      context
+                                          .read<CognitiveEngineProvider>()
+                                          .restartCalibration();
+                                    },
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    label: const Text(
+                                      "RESTART CALIBRATION",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                      ),
+                                    ),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: Colors.redAccent,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      context
+                                          .read<CognitiveEngineProvider>()
+                                          .abortCalibrationSession();
+                                      Navigator.of(context).pop();
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.white54,
+                                      side: BorderSide(
+                                        color: Colors.white.withAlpha(50),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 20,
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      "ABORT SESSION",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              // --- SCHERMATA: AFK STANDARD (Dopo 10 Minuti) ---
+              else if (engine.isAfkWarningActive)
                 Positioned.fill(
                   child: ClipRect(
                     child: BackdropFilter(
@@ -212,7 +317,7 @@ class _FocusModePageState extends State<FocusModePage> {
                               ),
                               const SizedBox(height: 16),
                               const Text(
-                                "Timer paused passively.\nSit down to auto-resume, or press the button.",
+                                "Timer paused passively.\nPress the button to auto-resume.",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white70,

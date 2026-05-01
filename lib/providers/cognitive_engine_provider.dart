@@ -2,16 +2,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-// Pacchetti Hardware
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:vibration/vibration.dart';
 
 import '../models/safte_state.dart';
+import '../models/session_data.dart';
 import '../services/simulator_service.dart';
 import '../functions/safte_engine.dart';
 import '../functions/biometric_analyzer.dart';
 
-// Iniezioni Modulari
 import 'safte_provider.dart';
 import 'clock_provider.dart';
 import 'analytics_provider.dart';
@@ -26,13 +25,16 @@ enum EngineState {
   sessionEnded,
 }
 
-class CognitiveEngineProvider extends ChangeNotifier {
+/// Core State Machine governing the Focus/Break lifecycle and telemetry ingestion.
+/// Enforces "Strict Mode": app backgrounding triggers AFK; app termination saves and closes the session.
+class CognitiveEngineProvider extends ChangeNotifier
+    with WidgetsBindingObserver {
   // ==========================================
-  // DEPENDENCIES & DOMAIN ENGINES
+  // DEPENDENCIES
   // ==========================================
   final SafteProvider safteProvider;
   final GlobalClockProvider clock;
-  final AnalyticsProvider analytics; // Il "Contabile"
+  final AnalyticsProvider analytics;
 
   final BiometricAnalyzer _biometrics = BiometricAnalyzer();
   ScenarioSimulator _scenarioSimulator;
@@ -42,6 +44,9 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // ==========================================
   static const int dailyMaxSeconds = 240 * 60;
   static const int tickDurationSeconds = 5;
+  static const int afkTimeoutSeconds = 60;
+  static const int calibrationWindowSeconds =
+      600; // First 10 minutes are critical for baseline
 
   static const double _inhibitedSafteThreshold = 65.0;
   static const double _warningSafteThreshold = 77.0;
@@ -57,7 +62,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   static const int _maxBreakExtensions = 3;
 
   // ==========================================
-  // INTERNAL STATE (Session Only)
+  // INTERNAL STATE
   // ==========================================
   EngineState _currentState = EngineState.idle;
   late DateTime _internalClock;
@@ -66,9 +71,9 @@ class CognitiveEngineProvider extends ChangeNotifier {
   int _targetBreakSeconds = 0;
   int _elapsedFocusSeconds = 0;
   int _elapsedBreakSeconds = 0;
-
   int _breakExtensions = 0;
   int _sessionTotalFocusSeconds = 0;
+  int _simulatorElapsedSeconds = 0;
 
   bool _isBreakRecommended = false;
   bool _isFocusRecommended = false;
@@ -85,7 +90,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // ==========================================
   EngineState get currentState => _currentState;
 
-  // Lettura Biologica Sicura Sincronizzata
   SafteState get safteSnapshot => safteProvider.getStateAt(_internalClock);
   double get currentEffectiveness => safteSnapshot.effectiveness;
   double get currentFatigue =>
@@ -97,11 +101,9 @@ class CognitiveEngineProvider extends ChangeNotifier {
   double get currentSegmentProgress => _targetSegmentSeconds > 0
       ? (_elapsedFocusSeconds / _targetSegmentSeconds).clamp(0.0, 1.0)
       : 0.0;
-
   double get currentStressIndex => _biometrics.currentStressIndex;
   int get segmentDurationMinutes => _targetSegmentSeconds ~/ 60;
-  int get workedTodayMinutes =>
-      analytics.dailyWorkedSeconds ~/ 60; // Delegato all'Analytics
+  int get workedTodayMinutes => analytics.dailyWorkedSeconds ~/ 60;
   bool get hasIncompleteRecovery => _breakExtensions > 0;
   int get sessionTotalFocusSeconds => _sessionTotalFocusSeconds;
   double get morningRHR => _biometrics.muBase;
@@ -109,6 +111,10 @@ class CognitiveEngineProvider extends ChangeNotifier {
   bool get isFocusRecommended => _isFocusRecommended;
   String get advisoryMessage => _advisoryMessage;
   bool get isAfkWarningActive => _isAfkWarningActive;
+
+  /// Determines if the AFK condition happened during the critical baseline calibration phase
+  bool get isCalibrationAnomaly =>
+      _isAfkWarningActive && _elapsedFocusSeconds <= calibrationWindowSeconds;
 
   int get currentSessionSeconds {
     if (_currentState == EngineState.analyzingBaseline ||
@@ -122,7 +128,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // INITIALIZATION
+  // INITIALIZATION & LIFECYCLE
   // ==========================================
   CognitiveEngineProvider(
     this.safteProvider,
@@ -130,12 +136,47 @@ class CognitiveEngineProvider extends ChangeNotifier {
     this.analytics, {
     SimulationScenario scenario = SimulationScenario.optimalFlow,
   }) : _scenarioSimulator = ScenarioSimulator(scenario) {
+    WidgetsBinding.instance.addObserver(this);
     _internalClock = clock.currentTime;
     clock.addListener(_onGlobalTick);
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // Trigger AFK/Anomaly if app is backgrounded
+      if ((_currentState == EngineState.focus ||
+              _currentState == EngineState.analyzingBaseline) &&
+          !_isAfkWarningActive) {
+        _isAfkWarningActive = true;
+        _updateWakelock();
+        _triggerDoubleVibration();
+        notifyListeners();
+      }
+    } else if (state == AppLifecycleState.detached) {
+      // Strict Mode: Gracefully save accumulated work on brutal termination
+      if (_currentState == EngineState.focus ||
+          _currentState == EngineState.breakMode ||
+          _currentState == EngineState.analyzingBaseline) {
+        if (_sessionTotalFocusSeconds >= 60) {
+          analytics.addSession(
+            CognitiveSession(
+              date: DateTime.now(),
+              durationSeconds: _sessionTotalFocusSeconds,
+              perceivedExertion: 3,
+              endingEffectiveness: currentEffectiveness,
+            ),
+          );
+        }
+        analytics.saveWorkloadToDisk();
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     WakelockPlus.disable();
     clock.removeListener(_onGlobalTick);
     super.dispose();
@@ -150,7 +191,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
             _currentState == EngineState.focus ||
             _currentState == EngineState.breakMode) &&
         !_isAfkWarningActive;
-
     if (shouldBeAwake) {
       WakelockPlus.enable();
     } else {
@@ -186,18 +226,15 @@ class CognitiveEngineProvider extends ChangeNotifier {
 
     if (delta >= tickDurationSeconds) {
       final int missedTicks = delta ~/ tickDurationSeconds;
-
       for (int i = 0; i < missedTicks; i++) {
         if (_currentState == EngineState.idle ||
             _currentState == EngineState.sessionEnded)
           break;
-
         _internalClock = _internalClock.add(
           const Duration(seconds: tickDurationSeconds),
         );
         _processTick();
       }
-
       notifyListeners();
     }
   }
@@ -209,7 +246,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
     if (analytics.dailyWorkedSeconds >= dailyMaxSeconds) return;
 
     _internalClock = clock.currentTime;
-
     if (safteSnapshot.effectiveness < _inhibitedSafteThreshold) {
       _currentState = EngineState.inhibited;
       notifyListeners();
@@ -219,8 +255,10 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _calculateNextSegmentDuration();
     _elapsedFocusSeconds = 0;
     _sessionTotalFocusSeconds = 0;
+    _simulatorElapsedSeconds = 0;
     _breakExtensions = 0;
     _isBreakRecommended = false;
+    _isFocusRecommended = false;
     _isAfkWarningActive = false;
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
@@ -230,7 +268,6 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _biometrics.resetSession();
     _currentState = EngineState.analyzingBaseline;
     _updateWakelock();
-
     notifyListeners();
   }
 
@@ -242,35 +279,39 @@ class CognitiveEngineProvider extends ChangeNotifier {
   // CORE ENGINE LOOP
   // ==========================================
   void _processTick() {
+    _simulatorElapsedSeconds += tickDurationSeconds;
     final int currentStepsDelta = _scenarioSimulator.getSimulatedSteps(
-      _elapsedFocusSeconds,
+      _simulatorElapsedSeconds,
     );
-
-    _secondsSinceLastStepCheck += tickDurationSeconds;
-    if (_secondsSinceLastStepCheck >= 60) {
-      _secondsSinceLastStepCheck = 0;
-      if (_biometrics.stepsLastMinute > 10) {
-        if (!_isAfkWarningActive && _currentState == EngineState.focus) {
-          _isAfkWarningActive = true;
-          _updateWakelock();
-          _triggerDoubleVibration();
-        }
-      }
-    }
-
     final double hr = _scenarioSimulator.getSimulatedHR(
-      _elapsedFocusSeconds,
+      _simulatorElapsedSeconds,
       _elapsedBreakSeconds,
       _currentState == EngineState.breakMode,
     );
 
-    _biometrics.addDataPoint(hr, currentStepsDelta, _elapsedFocusSeconds);
+    // Halt telemetry ingestion if AFK is active to prevent baseline pollution
+    if (!_isAfkWarningActive) {
+      _biometrics.addDataPoint(hr, currentStepsDelta, _elapsedFocusSeconds);
+      hrTimeline.add({
+        'time': _internalClock.toIso8601String(),
+        'hr': hr.round(),
+        'state': _currentState.name,
+      });
+    }
 
-    hrTimeline.add({
-      'time': _internalClock.toIso8601String(),
-      'hr': hr.round(),
-      'state': _currentState.name,
-    });
+    // Evaluate Physical Movement
+    _secondsSinceLastStepCheck += tickDurationSeconds;
+    if (_secondsSinceLastStepCheck >= 60) {
+      _secondsSinceLastStepCheck = 0;
+      if (_biometrics.stepsLastMinute > 10 &&
+          !_isAfkWarningActive &&
+          (_currentState == EngineState.focus ||
+              _currentState == EngineState.analyzingBaseline)) {
+        _isAfkWarningActive = true;
+        _updateWakelock();
+        _triggerDoubleVibration();
+      }
+    }
 
     switch (_currentState) {
       case EngineState.analyzingBaseline:
@@ -288,32 +329,38 @@ class CognitiveEngineProvider extends ChangeNotifier {
   }
 
   void _handleAnalyzingBaseline() {
-    _elapsedFocusSeconds += tickDurationSeconds;
-    _sessionTotalFocusSeconds += tickDurationSeconds;
-
-    if (_elapsedFocusSeconds == 180) {
-      _biometrics.optimizeBaseline();
-      _advisoryMessage = "Flow state identified. Session active.";
-      _currentState = EngineState.focus;
-    }
-  }
-
-  void _handleFocusMode() {
+    // Suspend calibration timer if an anomaly is detected
     if (_isAfkWarningActive) {
       _afkWarningSeconds += tickDurationSeconds;
-      if (_afkWarningSeconds >= 120) {
-        endSession();
-      }
+      if (_afkWarningSeconds >= afkTimeoutSeconds) abortCalibrationSession();
       return;
     }
 
     _elapsedFocusSeconds += tickDurationSeconds;
     _sessionTotalFocusSeconds += tickDurationSeconds;
 
-    // Delega al Contabile l'aggiornamento del lavoro
+    if (_elapsedFocusSeconds == 180) {
+      _biometrics.optimizeBaseline();
+      _advisoryMessage = "Flow state identified. Baseline tracking active.";
+      _currentState = EngineState.focus;
+    }
+  }
+
+  void _handleFocusMode() {
+    // Suspend productive timer if AFK
+    if (_isAfkWarningActive) {
+      _afkWarningSeconds += tickDurationSeconds;
+      if (_afkWarningSeconds >= afkTimeoutSeconds) endSession();
+      return;
+    }
+
+    _elapsedFocusSeconds += tickDurationSeconds;
+    _sessionTotalFocusSeconds += tickDurationSeconds;
     analytics.addWorkSeconds(tickDurationSeconds);
 
-    if (_elapsedFocusSeconds <= 600 && _elapsedFocusSeconds % 15 == 0) {
+    // Continuous baseline optimization during the first 10 minutes
+    if (_elapsedFocusSeconds <= calibrationWindowSeconds &&
+        _elapsedFocusSeconds % 15 == 0) {
       _biometrics.optimizeBaseline();
     }
 
@@ -322,9 +369,9 @@ class CognitiveEngineProvider extends ChangeNotifier {
       return;
     }
 
+    // Predictive Break Evaluation
     if (!_isBreakRecommended) {
       bool triggerAlert = false;
-
       if (_elapsedFocusSeconds >= _targetSegmentSeconds) {
         _advisoryMessage = "Optimal focus time reached. Initiate break.";
         triggerAlert = true;
@@ -343,6 +390,11 @@ class CognitiveEngineProvider extends ChangeNotifier {
     }
   }
 
+  // ==========================================
+  // MANUAL CONTROLS & UI RESOLVERS
+  // ==========================================
+
+  /// Explicit user input required to resume from standard AFK
   void resolveAfkWarning() {
     _isAfkWarningActive = false;
     _afkWarningSeconds = 0;
@@ -352,14 +404,26 @@ class CognitiveEngineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Restarts the entire session if baseline was corrupted by early movement
+  void restartCalibration() {
+    HapticFeedback.lightImpact();
+    resetEngine();
+    startSession();
+  }
+
+  /// Aborts the session without saving if abandoned during calibration
+  void abortCalibrationSession() {
+    HapticFeedback.heavyImpact();
+    resetEngine();
+  }
+
+  // ... (RESTO DEI METODI HELPER INVARIATI) ...
   void _handleBreakMode() {
     final int previousElapsed = _elapsedBreakSeconds;
     _elapsedBreakSeconds += tickDurationSeconds;
-
     bool justCrossedTarget =
         previousElapsed < _targetBreakSeconds &&
         _elapsedBreakSeconds >= _targetBreakSeconds;
-
     if (justCrossedTarget) {
       if (_biometrics.isRecoveryIncomplete()) {
         if (_breakExtensions < _maxBreakExtensions) {
@@ -384,18 +448,13 @@ class CognitiveEngineProvider extends ChangeNotifier {
     }
   }
 
-  // ==========================================
-  // HELPER METHODS & MANUAL TRANSITIONS
-  // ==========================================
   void _calculateNextSegmentDuration() {
     final double currentE = safteSnapshot.effectiveness;
-
     if (currentE < _inhibitedSafteThreshold) {
       _targetSegmentSeconds = 15 * 60;
       _targetBreakSeconds = 5 * 60;
       return;
     }
-
     int baseFocusMinutes;
     if (currentE >= _optimalSafteThreshold) {
       baseFocusMinutes = _optimalSegmentMinutes;
@@ -409,31 +468,24 @@ class CognitiveEngineProvider extends ChangeNotifier {
           _warningSegmentMinutes +
           (ratio * (_optimalSegmentMinutes - _warningSegmentMinutes)).round();
     }
-
     int focusMinutes = baseFocusMinutes;
-
     for (int futureMin = 1; futureMin <= baseFocusMinutes; futureMin++) {
       final projectedTime = _internalClock.add(Duration(minutes: futureMin));
-
       final projectedState = SafteEngine.computeStateAt(
         reservoirAtWakeup: safteProvider.baselineReservoir,
         wakeupTime: safteProvider.wakeupTime,
         targetTime: projectedTime,
       );
-
       if (projectedState.effectiveness <= _warningSafteThreshold) {
         focusMinutes = math.max(_warningSegmentMinutes, futureMin - 1);
         break;
       }
     }
-
     final int remainingDailySeconds =
         dailyMaxSeconds - analytics.dailyWorkedSeconds;
     _targetSegmentSeconds = math.min(focusMinutes * 60, remainingDailySeconds);
-
     final int actualFocusMinutes = _targetSegmentSeconds ~/ 60;
     int breakMinutes;
-
     if (actualFocusMinutes >= _optimalSegmentMinutes) {
       breakMinutes = _optimalBreakMinutes;
     } else if (actualFocusMinutes <= _warningSegmentMinutes) {
@@ -504,6 +556,7 @@ class CognitiveEngineProvider extends ChangeNotifier {
     _targetBreakSeconds = 0;
     _elapsedFocusSeconds = 0;
     _elapsedBreakSeconds = 0;
+    _simulatorElapsedSeconds = 0;
     _breakExtensions = 0;
     _sessionTotalFocusSeconds = 0;
     _isBreakRecommended = false;

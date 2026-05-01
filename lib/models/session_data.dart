@@ -10,4 +10,22 @@ class CognitiveSession {
     required this.perceivedExertion,
     required this.endingEffectiveness,
   });
+
+  // Serializzazione per SharedPreferences
+  Map<String, dynamic> toJson() => {
+    'date': date.toIso8601String(),
+    'durationSeconds': durationSeconds,
+    'perceivedExertion': perceivedExertion,
+    'endingEffectiveness': endingEffectiveness,
+  };
+
+  // Deserializzazione
+  factory CognitiveSession.fromJson(Map<String, dynamic> json) {
+    return CognitiveSession(
+      date: DateTime.parse(json['date']),
+      durationSeconds: json['durationSeconds'] as int,
+      perceivedExertion: json['perceivedExertion'] as int,
+      endingEffectiveness: (json['endingEffectiveness'] as num).toDouble(),
+    );
+  }
 }

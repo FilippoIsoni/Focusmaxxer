@@ -68,7 +68,7 @@ class FocusMaxxerApp extends StatelessWidget {
                 .read<
                   AnalyticsProvider
                 >(), // <-- Passiamo l'Analytics, non le prefs!
-            scenario: SimulationScenario.acuteStress,
+            scenario: SimulationScenario.testTaskAbandonment,
           ),
           update: (context, clock, safte, analytics, previousEngine) =>
               previousEngine ??
@@ -76,7 +76,7 @@ class FocusMaxxerApp extends StatelessWidget {
                 safte,
                 clock,
                 analytics, // <-- Aggiornato anche qui
-                scenario: SimulationScenario.acuteStress,
+                scenario: SimulationScenario.testTaskAbandonment,
               ),
         ),
       ],
