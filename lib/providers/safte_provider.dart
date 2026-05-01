@@ -52,16 +52,18 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
   // INIZIALIZZAZIONE E CICLO DI VITA
   // ==========================================
 
+  final SharedPreferences prefs;
+
   /// Il costruttore viene chiamato nel momento in cui l'app si avvia.
-  SafteProvider() {
+  SafteProvider(this.prefs) {
     // Si iscrive agli eventi di sistema per sapere quando l'app va in background o viene chiusa
     WidgetsBinding.instance.addObserver(this);
     
+    // Tenta di caricare i dati dei giorni precedenti salvati sul telefono in modo sincrono
+    loadLocalDataSync();
+
     // Esegue un primo calcolo immediato per non lasciare la UI senza dati
     updateSafteState(); 
-    
-    // Tenta di caricare i dati dei giorni precedenti salvati sul telefono
-    loadLocalData();
 
     // Avvia un timer continuo che ogni 60 secondi esatti:
     // 1. Ricalcola la stanchezza basandosi sulla nuova ora
@@ -99,9 +101,7 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Legge il database locale del telefono per recuperare i parametri
   /// biologici salvati dalle sessioni dei giorni precedenti.
-  Future<void> loadLocalData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
+  void loadLocalDataSync() {
     // Tenta di recuperare e convertire le stringhe di testo in date reali
     final wakeStr = prefs.getString('t_wake');
     if (wakeStr != null) tWake = DateTime.tryParse(wakeStr);
@@ -122,10 +122,6 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
       // Altrimenti applichiamo un fallback di sicurezza per evitare errori
       wakeupTime = DateTime.now().subtract(const Duration(hours: 2)); 
     }
-
-    // Ricalcola tutto con i dati appena caricati
-    updateSafteState();
-    notifyListeners(); // Avvisa la UI che i dati veri sono pronti
   }
 
   /// È il cuore della logica di allineamento clinico.
@@ -137,8 +133,6 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
     required double sEff,
     required bool isMainSleep,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    
     // Controlla se le date arrivate dal server sono diverse da quelle che abbiamo in memoria.
     // Se sono diverse, significa che il server ci sta parlando di una notte "nuova" 
     // che noi non avevamo ancora registrato.
@@ -208,7 +202,6 @@ class SafteProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Salva in emergenza quanta energia ti è rimasta "adesso".
   /// Questo diventerà il tuo "debito di partenza" quando andrai a letto.
   Future<void> saveOngoingProgress() async {
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('r_pre_sleep', safteState.reservoir); 
   }
 }//end of safte_provider.dart

@@ -16,13 +16,16 @@ import 'screens/onboarding_page.dart';
 import 'screens/login_page.dart';
 import 'screens/home_dashboard.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const FocusMaxxerApp());
+  final prefs = await SharedPreferences.getInstance();
+  runApp(FocusMaxxerApp(prefs: prefs));
 }
 
 class FocusMaxxerApp extends StatelessWidget {
-  const FocusMaxxerApp({super.key});
+  final SharedPreferences prefs;
+
+  const FocusMaxxerApp({super.key, required this.prefs});
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class FocusMaxxerApp extends StatelessWidget {
 
         // 3. Orologio Biologico (Inizializzato prima del Cognitive Engine)
         ChangeNotifierProvider<SafteProvider>(
-          create: (_) => SafteProvider(),
+          create: (_) => SafteProvider(prefs),
         ),
 
         // 3. Central Cognitive Engine (Dipende dal Ticker E dal SafteProvider)
@@ -47,6 +50,7 @@ class FocusMaxxerApp extends StatelessWidget {
           create: (context) => CognitiveEngineProvider(
             context.read<SafteProvider>(),
             context.read<WarpTickerService>(),
+            prefs,
             scenario: SimulationScenario.acuteStress,
           ),
           update: (context, ticker, safte, previousEngine) =>
@@ -54,12 +58,13 @@ class FocusMaxxerApp extends StatelessWidget {
               CognitiveEngineProvider(
                 safte,
                 ticker,
+                prefs,
                 scenario: SimulationScenario.acuteStress,
               ),
         ),
 
         // 4. Authentication State Manager 
-        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
+        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(prefs)),
         
         // 5. Analytics Manager
         ChangeNotifierProvider<AnalyticsProvider>(

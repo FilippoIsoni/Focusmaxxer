@@ -33,6 +33,7 @@ class CognitiveEngineProvider extends ChangeNotifier with WidgetsBindingObserver
   // ==========================================
 
   final SafteProvider safteProvider; // DIPENDENZA BIOLOGICA
+  final SharedPreferences prefs;
   final BiometricAnalyzer _biometrics = BiometricAnalyzer();
   final WarpTickerService _ticker;
   ScenarioSimulator _scenarioSimulator;
@@ -134,7 +135,8 @@ class CognitiveEngineProvider extends ChangeNotifier with WidgetsBindingObserver
 
   CognitiveEngineProvider(
     this.safteProvider, // Iniezione dal file main.dart
-    this._ticker, {
+    this._ticker,
+    this.prefs, {
     SimulationScenario scenario = SimulationScenario.optimalFlow,
   }) : _scenarioSimulator = ScenarioSimulator(scenario) {
     WidgetsBinding.instance.addObserver(this);
@@ -152,18 +154,11 @@ class CognitiveEngineProvider extends ChangeNotifier with WidgetsBindingObserver
 
     _ticker.start(const Duration(minutes: idleTickMinutes));
     
-    // Recupera i secondi lavorati dal database all'avvio
-    _loadWorkedSeconds();
-  }
-
-  Future<void> _loadWorkedSeconds() async {
-    final prefs = await SharedPreferences.getInstance();
+    // Recupera i secondi lavorati dal database all'avvio (sincrono)
     _dailyWorkedSeconds = prefs.getInt('worked_seconds') ?? 0;
-    notifyListeners();
   }
 
   Future<void> _saveOngoingProgress() async {
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('worked_seconds', _dailyWorkedSeconds);
   }
 
@@ -600,7 +595,6 @@ class CognitiveEngineProvider extends ChangeNotifier with WidgetsBindingObserver
   /// Da chiamare quando il SafteProvider rileva un nuovo ciclo di sonno.
   Future<void> resetDailyWork() async {
     _dailyWorkedSeconds = 0;
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('worked_seconds', 0);
     notifyListeners();
     print("⏱️ Minuti di lavoro giornalieri azzerati per il nuovo giorno.");

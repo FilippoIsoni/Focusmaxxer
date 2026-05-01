@@ -10,13 +10,14 @@ class AuthProvider extends ChangeNotifier {
   String surname = '';
   String nickname = '';
 
-  AuthProvider() {
-    _checkInitialState();
+  final SharedPreferences prefs;
+
+  AuthProvider(this.prefs) {
+    _checkInitialStateSync();
   }
 
-  // 1. Ora LEGGE la memoria vera del telefono all'avvio
-  Future<void> _checkInitialState() async {
-    final prefs = await SharedPreferences.getInstance();
+  // 1. Ora LEGGE la memoria vera del telefono all'avvio (sincrono)
+  void _checkInitialStateSync() {
     // Controlliamo i dati salvati. Se non ci sono, usiamo i default (true per il primo avvio)
     bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
     bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
@@ -37,7 +38,6 @@ class AuthProvider extends ChangeNotifier {
 
   // 2. SCRIVE in memoria che il carosello è stato completato
   Future<void> completeOnboarding() async {
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isFirstTime', false); 
     status = AuthStatus.unauthenticated;
     notifyListeners();
@@ -47,7 +47,6 @@ class AuthProvider extends ChangeNotifier {
   Future<void> login(String username, String password) async {
     await Future.delayed(const Duration(milliseconds: 1500));
     if (username == 'admin' && password == '123') {
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('isLoggedIn', true);  
       status = AuthStatus.authenticated;
       notifyListeners();
@@ -58,7 +57,6 @@ class AuthProvider extends ChangeNotifier {
 
   // CANCELLA il login dalla memoria
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isLoggedIn', false); // Dimentica l'utente
     status = AuthStatus.unauthenticated;
     notifyListeners();
@@ -68,8 +66,6 @@ class AuthProvider extends ChangeNotifier {
 
   //Salva i dati anagrafici inseriti dall'utente
   Future<void> updateProfile(String newName, String newSurname, String newNickname) async {
-    final prefs = await SharedPreferences.getInstance();
-    
     await prefs.setString('profile_name', newName);
     await prefs.setString('profile_surname', newSurname);
     await prefs.setString('profile_nickname', newNickname);
@@ -84,8 +80,6 @@ class AuthProvider extends ChangeNotifier {
 
   //Cancella solo l'identità (usato dal tasto rosso della ProfilePage)
   Future<void> clearProfileData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
     await prefs.remove('profile_name');
     await prefs.remove('profile_surname');
     await prefs.remove('profile_nickname');

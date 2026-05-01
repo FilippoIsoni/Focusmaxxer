@@ -279,8 +279,7 @@ class _SessionTimerDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     final engine = context.watch<CognitiveEngineProvider>();
 
-    if (engine.currentState == EngineState.idle ||
-        engine.currentState == EngineState.analyzingBaseline) {
+    if (engine.currentState == EngineState.idle) {
       return const Text(
         "--:--",
         style: TextStyle(
