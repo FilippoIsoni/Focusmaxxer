@@ -3,55 +3,36 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/session_data.dart';
 
-class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
+/// Manages the persistence of user workload and historical sessions.
+/// It operates strictly as a vault, accepting data only when explicitly commanded.
+class AnalyticsProvider extends ChangeNotifier {
   final SharedPreferences prefs;
 
-  // --- STATO LIVE ---
+  // --- LIVE STATE ---
   int _dailyWorkedSeconds = 0;
   int get dailyWorkedSeconds => _dailyWorkedSeconds;
 
-  // --- STORICO SESSIONI ---
+  // --- HISTORY ---
   List<CognitiveSession> _sessions = [];
   List<CognitiveSession> get sessions => List.unmodifiable(_sessions);
 
   AnalyticsProvider(this.prefs) {
-    WidgetsBinding.instance.addObserver(this);
     _dailyWorkedSeconds = prefs.getInt('worked_seconds') ?? 0;
     _loadSessionsHistory();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // FIX Problema 2: Rimosso 'detached'. Il salvataggio alla chiusura brutale
-    // ora è orchestrato esclusivamente dall'Engine per evitare Race Conditions.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      saveWorkloadToDisk();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
   // ==========================================
-  // GESTIONE LAVORO GIORNALIERO (Live)
+  // WORKLOAD CONSOLIDATION
   // ==========================================
 
-  void addWorkSeconds(int seconds) {
-    _dailyWorkedSeconds += seconds;
-    notifyListeners();
-  }
+  /// Applies a fully validated session to the daily limits and historical ledger.
+  void commitValidatedSession(CognitiveSession session) {
+    _dailyWorkedSeconds += session.durationSeconds;
+    _sessions.insert(0, session);
 
-  /// FIX Problema 3: Metodo di Rollback per le "False Partenze"
-  /// Sottrae dal totale giornaliero i secondi accumulati in una sessione poi abortita.
-  void rollbackWorkSeconds(int seconds) {
-    _dailyWorkedSeconds -= seconds;
-    if (_dailyWorkedSeconds < 0) {
-      _dailyWorkedSeconds = 0; // Previene valori negativi
-    }
+    // Save to disk immediately upon commit
+    saveWorkloadToDisk();
+    _saveSessionsHistory();
     notifyListeners();
   }
 
@@ -66,17 +47,11 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ==========================================
-  // GESTIONE STORICO SESSIONI E PERSISTENZA
+  // HISTORY PERSISTENCE
   // ==========================================
 
   int get totalFocusSeconds =>
       _sessions.fold(0, (sum, s) => sum + s.durationSeconds);
-
-  void addSession(CognitiveSession session) {
-    _sessions.insert(0, session);
-    _saveSessionsHistory();
-    notifyListeners();
-  }
 
   Future<void> _saveSessionsHistory() async {
     final List<String> jsonList = _sessions

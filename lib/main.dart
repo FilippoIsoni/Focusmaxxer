@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // --- SERVICES & PROVIDERS ---
 import 'services/simulator_service.dart';
 import 'services/impact_api_service.dart';
+import 'services/device_hardware_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/analytics_provider.dart';
 import 'providers/clock_provider.dart';
@@ -40,6 +41,7 @@ class FocusMaxxerApp extends StatelessWidget {
       providers: [
         // 1. Network Layer
         Provider<ImpactApiService>(create: (_) => ImpactApiService()),
+        Provider<DeviceHardwareService>(create: (_) => DeviceHardwareService()),
 
         // 2. Base State Providers
         ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
@@ -57,6 +59,7 @@ class FocusMaxxerApp extends StatelessWidget {
             context.read<GlobalClockProvider>(),
             context.read<AnalyticsProvider>(),
             scenario: SimulationScenario.optimalFlow,
+            context.read<DeviceHardwareService>(),
           ),
         ),
       ],

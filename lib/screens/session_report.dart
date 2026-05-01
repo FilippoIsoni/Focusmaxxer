@@ -4,8 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../providers/cognitive_engine_provider.dart';
-import '../providers/analytics_provider.dart';
-import '../models/session_data.dart';
 
 class SessionReportPage extends StatelessWidget {
   final Duration duration;
@@ -13,36 +11,30 @@ class SessionReportPage extends StatelessWidget {
   const SessionReportPage({super.key, required this.duration});
 
   void _finishSession(BuildContext context) {
-    final engine = context.read<CognitiveEngineProvider>();
-    final analytics = context.read<AnalyticsProvider>();
+    // La sessione è GIÀ stata salvata in modo sicuro dal CognitiveEngineProvider
+    // nel momento esatto in cui siamo passati allo stato "sessionEnded".
+    // Qui dobbiamo solo "pulire" la lavagna (il buffer) e tornare alla Home.
 
-    analytics.addSession(
-      CognitiveSession(
-        date: DateTime.now(),
-        durationSeconds: duration.inSeconds,
-        perceivedExertion: 3,
-        endingEffectiveness: engine.currentEffectiveness,
-      ),
-    );
+    context.read<CognitiveEngineProvider>().resetEngine();
 
-    engine.endSession();
     HapticFeedback.mediumImpact();
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   String _formatDuration(Duration d) {
-    final minutes = d.inMinutes;// porto la durata in minuti
+    final minutes = d.inMinutes; // porto la durata in minuti
     if (minutes < 60) return '$minutes min';
-    return '${minutes ~/ 60}h ${minutes % 60}m';// se è più di un'ora, mostro ore e minuti
+    return '${minutes ~/ 60}h ${minutes % 60}m'; // se è di un'ora, mostro ore e minuti
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
-    // Estraiamo la timeline dall'engine
+
+    // Estraiamo la timeline dall'engine (il buffer è ancora vivo qui)
     final hrTimeline = context.read<CognitiveEngineProvider>().hrTimeline;
+
     // Calcoliamo TUTTE le statistiche qui
     int avgHr = 0;
     int peakHr = 0;
@@ -51,14 +43,12 @@ class SessionReportPage extends StatelessWidget {
     if (hrTimeline.isNotEmpty) {
       int totalHr = 0;
       int breakTicks = 0; // Contiamo i "tick" passati in pausa
-
       for (var point in hrTimeline) {
         int hr = point['hr'] as int;
         String state = point['state'] as String? ?? 'focus';
-
         totalHr += hr; // Somma per la media
         if (hr > peakHr) peakHr = hr; // Trova il picco
-        
+
         // Se non è in focus, è in pausa
         if (state != 'focus' && state != 'analyzingBaseline') {
           breakTicks++;
@@ -67,17 +57,19 @@ class SessionReportPage extends StatelessWidget {
       // calcolo la media dell'HR
       avgHr = totalHr ~/ hrTimeline.length;
       // Dal tuo grafico sappiamo che 1 tick = 5 secondi
-      recoveryMin = (breakTicks * 5) ~/ 60; 
+      recoveryMin = (breakTicks * 5) ~/ 60;
     }
 
-    return PopScope(// Blocca il back button fisico su Android
+    return PopScope(
+      // Blocca il back button fisico su Android
       canPop: false,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: SafeArea(
           child: CustomScrollView(
             slivers: [
-              SliverFillRemaining(// riempie lo schermo, se necessario scrolla, altrimenti no
+              SliverFillRemaining(
+                // riempie lo schermo, se necessario scrolla, altrimenti no
                 hasScrollBody: false,
                 child: Padding(
                   padding: const EdgeInsets.all(26.0),
@@ -108,10 +100,10 @@ class SessionReportPage extends StatelessWidget {
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
-
                       const SizedBox(height: 40),
-                   
-                      Container(// container con le statistiche
+
+                      Container(
+                        // container con le statistiche
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
                           color: colorScheme.surface,
@@ -126,28 +118,47 @@ class SessionReportPage extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _buildStatItem(context, 'DURATION', _formatDuration(duration)),
-                                _buildStatItem(context, 'AVG HR', '${avgHr > 0 ? avgHr : '--'} bpm', isRight: true),
+                                _buildStatItem(
+                                  context,
+                                  'DURATION',
+                                  _formatDuration(duration),
+                                ),
+                                _buildStatItem(
+                                  context,
+                                  'AVG HR',
+                                  '${avgHr > 0 ? avgHr : '--'} bpm',
+                                  isRight: true,
+                                ),
                               ],
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 20.0),
-                              child: Divider(color: Colors.white10, height: 1), // Linea tech divisoria
+                              child: Divider(
+                                color: Colors.white10,
+                                height: 1,
+                              ), // Linea tech divisoria
                             ),
                             // Seconda riga: Recupero e Picco
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _buildStatItem(context, 'RECOVERY', '$recoveryMin min'),
-                                _buildStatItem(context, 'PEAK HR', '${peakHr > 0 ? peakHr : '--'} bpm', isRight: true),
+                                _buildStatItem(
+                                  context,
+                                  'RECOVERY',
+                                  '$recoveryMin min',
+                                ),
+                                _buildStatItem(
+                                  context,
+                                  'PEAK HR',
+                                  '${peakHr > 0 ? peakHr : '--'} bpm',
+                                  isRight: true,
+                                ),
                               ],
                             ),
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 40),
-
                       Text(
                         'HEART RATE TIMELINE',
                         textAlign: TextAlign.center,
@@ -158,16 +169,20 @@ class SessionReportPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 24),
-
                       SizedBox(
                         height: 240,
-                        child: hrTimeline.isEmpty //se non ho dati, mostro un messaggio invece del grafico
-                            ? const Center(child: Text("No HR data available", style: TextStyle(color: Colors.white54)))
+                        child:
+                            hrTimeline
+                                .isEmpty // se non ho dati, mostro un messaggio invece del grafico
+                            ? const Center(
+                                child: Text(
+                                  "No HR data available",
+                                  style: TextStyle(color: Colors.white54),
+                                ),
+                              )
                             : _buildChart(colorScheme, hrTimeline),
                       ),
-
-                      const Spacer(),// spinge il bottone in fondo
-
+                      const Spacer(), // spinge il bottone in fondo
                       FilledButton(
                         onPressed: () => _finishSession(context),
                         style: FilledButton.styleFrom(
@@ -193,10 +208,17 @@ class SessionReportPage extends StatelessWidget {
     );
   }
 
-  // widget per le statistiche - Modificato per allineare a destra la seconda colonna
-  Widget _buildStatItem(BuildContext context, String label, String value, {bool isRight = false}) {
+  // widget per le statistiche
+  Widget _buildStatItem(
+    BuildContext context,
+    String label,
+    String value, {
+    bool isRight = false,
+  }) {
     return Column(
-      crossAxisAlignment: isRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: isRight
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Text(
           label,
@@ -217,7 +239,10 @@ class SessionReportPage extends StatelessWidget {
     );
   }
 
-  Widget _buildChart(ColorScheme colorScheme, List<Map<String, dynamic>> timeline) {
+  Widget _buildChart(
+    ColorScheme colorScheme,
+    List<Map<String, dynamic>> timeline,
+  ) {
     final List<FlSpot> spots = [];
     final List<VerticalRangeAnnotation> annotations = [];
 
@@ -225,9 +250,8 @@ class SessionReportPage extends StatelessWidget {
       double startX = (i * 5) / 60.0;
       double endX = ((i + 1) * 5) / 60.0;
       double hrValue = (timeline[i]['hr'] as int).toDouble();
-      
-      spots.add(FlSpot(startX, hrValue));
 
+      spots.add(FlSpot(startX, hrValue));
       String state = timeline[i]['state'] as String? ?? 'focus';
       bool isFocus = state == 'focus' || state == 'analyzingBaseline';
 
@@ -236,16 +260,17 @@ class SessionReportPage extends StatelessWidget {
           x1: startX,
           x2: endX,
           color: isFocus
-              ? const Color.fromARGB(255, 251, 99, 5).withOpacity(0.3) // Opacità abbassata!
-              : const Color.fromARGB(255, 5, 107, 251).withOpacity(0.3), // Opacità abbassata!
+              ? const Color.fromARGB(255, 251, 99, 5).withOpacity(0.3)
+              : const Color.fromARGB(255, 5, 107, 251).withOpacity(0.3),
         ),
       );
     }
 
     return Column(
       children: [
-        Expanded(// il grafico prende tutto lo spazio disponibile
-          child: ClipRRect( // Arrotonda gli spigoli del grafico
+        Expanded(
+          child: ClipRRect(
+            // Arrotonda gli spigoli del grafico
             borderRadius: BorderRadius.circular(12),
             child: LineChart(
               LineChartData(
@@ -262,7 +287,7 @@ class SessionReportPage extends StatelessWidget {
                     spots: spots,
                     isCurved: true,
                     color: Colors.white,
-                    barWidth: 2.5, // Leggermente assottigliato per eleganza
+                    barWidth: 2.5,
                     isStrokeCapRound: true,
                     dotData: const FlDotData(show: false),
                   ),
@@ -270,37 +295,34 @@ class SessionReportPage extends StatelessWidget {
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
                     getTooltipItems: (touchedSpots) {
-                                        return touchedSpots.map((spot) {
-                                // 1. Estraiamo il tempo dall'asse X
-                                // (Assumendo che ogni punto sull'asse X sia 1 secondo)
-                                        final int totalSeconds = spot.x.toInt();
-                                        final int minutes = totalSeconds ~/ 60;
-                                        final int seconds = totalSeconds % 60;
+                      return touchedSpots.map((spot) {
+                        final int totalSeconds =
+                            spot.x.toInt() *
+                            60; // Ripristinato il calcolo corretto in base ai minuti
+                        final int minutes = totalSeconds ~/ 60;
+                        final int seconds = totalSeconds % 60;
+                        final String timeStr =
+                            '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
 
-                                        // 2. Formattiamo il tempo in stile cronometro (es. 05:30)
-                                        // padLeft aggiunge uno '0' se il numero è a una cifra sola
-                                        final String timeStr = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-
-                                        // 3. Costruiamo il tooltip con due stili di testo diversi
-                                        return LineTooltipItem(
-                                          '$timeStr\n', // Prima riga: il tempo con "a capo" (\n)
-                                          const TextStyle(
-                                            color: Color(0xFF94A3B8), // Il nostro amato grigietto Slate per il tempo
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                          children: [
-                                            TextSpan(
-                                              text: '${spot.y.toInt()} BPM', // Seconda riga: il battito
-                                              style: const TextStyle(
-                                                color: Colors.white, // Bianco puro e grassetto per dare priorità visiva
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      }).toList();
+                        return LineTooltipItem(
+                          '$timeStr\n',
+                          const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: '${spot.y.toInt()} BPM',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList();
                     },
                   ),
                 ),
@@ -318,16 +340,26 @@ class SessionReportPage extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildLegendItem(color: Color.fromARGB(255, 251, 99, 5), label: "Focus"),
+        _buildLegendItem(
+          color: const Color.fromARGB(255, 251, 99, 5),
+          label: "Focus",
+        ),
         const SizedBox(width: 16),
-        _buildLegendItem(color: const Color.fromARGB(255, 5, 107, 251), label: "Break"),
+        _buildLegendItem(
+          color: const Color.fromARGB(255, 5, 107, 251),
+          label: "Break",
+        ),
         const SizedBox(width: 16),
         _buildLegendItem(color: Colors.white, label: "HR", isLine: true),
       ],
     );
   }
 
-  Widget _buildLegendItem({required Color color, required String label, bool isLine = false}) {
+  Widget _buildLegendItem({
+    required Color color,
+    required String label,
+    bool isLine = false,
+  }) {
     return Row(
       children: [
         Container(
