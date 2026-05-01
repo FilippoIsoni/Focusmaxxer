@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/cognitive_engine_provider.dart';
+import '../utils/dashboard_helpers.dart';
 import 'session_report.dart';
 import 'focus_mode_page.dart';
 
@@ -14,8 +16,9 @@ class BreakModePage extends StatefulWidget {
 
 class _BreakModePageState extends State<BreakModePage>
     with SingleTickerProviderStateMixin {
+  bool _isNavigating = false;
+  late CognitiveEngineProvider _engineRef;
   late AnimationController _breathController;
-  CognitiveEngineProvider? _engineListener;
 
   @override
   void initState() {
@@ -24,232 +27,415 @@ class _BreakModePageState extends State<BreakModePage>
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
-  }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _engineListener ??= context.read<CognitiveEngineProvider>()
-      ..addListener(_onStateChange);
-  }
-
-  void _onStateChange() {
-    if (!mounted) return;
-    if (_engineListener!.currentState == EngineState.sessionEnded) {
-      _engineListener!.removeListener(_onStateChange);
-      final fakeElapsed = Duration(
-        seconds: _engineListener!.sessionTotalFocusSeconds,
-      );
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => SessionReportPage(duration: fakeElapsed),
-        ),
-      );
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _engineRef = context.read<CognitiveEngineProvider>();
+      _engineRef.addListener(_checkAutoRoute);
+    });
   }
 
   @override
   void dispose() {
-    _engineListener?.removeListener(_onStateChange);
     _breathController.dispose();
+    _engineRef.removeListener(_checkAutoRoute);
     super.dispose();
+  }
+
+  void _checkAutoRoute() {
+    if (_isNavigating || !mounted) return;
+    if (_engineRef.advisoryMessage.contains('Maximum break reached')) {
+      _isNavigating = true;
+      HapticFeedback.heavyImpact();
+      final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
+      _engineRef.endSession();
+      Navigator.of(context).pushReplacement(
+        PremiumPageRoute(page: SessionReportPage(duration: duration)),
+      );
+    }
+  }
+
+  String _formatTime(int totalSeconds) {
+    final m = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final s = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   @override
   Widget build(BuildContext context) {
-    final engine = context.watch<CognitiveEngineProvider>();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final engine = context.watch<CognitiveEngineProvider>();
+
+    final int elapsedSeconds = engine.currentSessionSeconds;
+    final bool isExtended = engine.hasIncompleteRecovery;
     final bool canResume = engine.isFocusRecommended;
 
+    final Color ambientColor = isExtended
+        ? colorScheme.secondary
+        : colorScheme.tertiary;
+
     return PopScope(
-      canPop: false, // Impedisce fuga via swipe
+      canPop: false,
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: SafeArea(
-          child: Stack(
-            children: [
-              AnimatedBuilder(
-                animation: _breathController,
-                builder: (context, child) {
-                  final curve = Curves.easeInOutSine.transform(
-                    _breathController.value,
-                  );
-                  return Center(
+        backgroundColor: colorScheme.surface,
+        body: Stack(
+          children: [
+            // --- AMBIENT GLOW ---
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 1200),
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [
+                      ambientColor.withAlpha(isExtended ? 25 : 15),
+                      Colors.transparent,
+                    ],
+                    radius: 1.2,
+                  ),
+                ),
+              ),
+            ),
+
+            // --- FOREGROUND ---
+            SafeArea(
+              child: Column(
+                children: [
+                  // 1. TOP STATUS BAR
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0,
+                      vertical: 16.0,
+                    ),
                     child: Container(
-                      width: 250 + (curve * 80),
-                      height: 250 + (curve * 80),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 12.0,
+                      ),
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colorScheme.tertiary.withAlpha(
-                          (15 + curve * 20).toInt(),
+                        color: colorScheme.surfaceContainerHighest.withAlpha(
+                          80,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colorScheme.tertiary.withAlpha(
-                              (10 + curve * 15).toInt(),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withAlpha(10)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.waves_rounded,
+                            color: ambientColor,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'NEURAL RECOVERY',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: ambientColor,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
                             ),
-                            blurRadius: 50 + (curve * 30),
-                            spreadRadius: 20 + (curve * 20),
                           ),
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
 
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedBuilder(
-                      animation: _breathController,
-                      builder: (context, child) {
-                        final isExhaling =
-                            _breathController.status == AnimationStatus.reverse;
-                        return Text(
-                          isExhaling ? 'Breathe out...' : 'Breathe in...',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: colorScheme.tertiary.withAlpha(150),
-                            letterSpacing: 4.0,
-                            fontWeight: FontWeight.w300,
+                  // 2. CENTRAL TECH-BREATHING RING
+                  Expanded(
+                    child: Center(
+                      child: AnimatedBuilder(
+                        animation: _breathController,
+                        builder: (context, child) {
+                          final curve = Curves.easeInOutSine.transform(
+                            _breathController.value,
+                          );
+                          final isExhaling =
+                              _breathController.status ==
+                              AnimationStatus.reverse;
+
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 260 + (curve * 40),
+                                height: 260 + (curve * 40),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: ambientColor.withAlpha(
+                                      (20 + curve * 40).toInt(),
+                                    ),
+                                    width: 1 + (curve * 2),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: ambientColor.withAlpha(
+                                        (5 + curve * 15).toInt(),
+                                      ),
+                                      blurRadius: 30 + (curve * 20),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                width: 240,
+                                height: 240,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white.withAlpha(10),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExhaling ? 'EXHALE' : 'INHALE',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: ambientColor.withAlpha(150),
+                                      letterSpacing: 3.0,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _formatTime(elapsedSeconds),
+                                    style: theme.textTheme.displayLarge
+                                        ?.copyWith(
+                                          fontSize: 64,
+                                          fontWeight: FontWeight.w200,
+                                          color: Colors.white,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // 3. ADVISORY & WARNINGS
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                    child: Column(
+                      children: [
+                        Text(
+                          engine.advisoryMessage,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            height: 1.5,
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Adaptive Break',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onSurface,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                      child: Text(
-                        engine.advisoryMessage,
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: canResume
-                              ? colorScheme.primary
-                              : colorScheme.onSurfaceVariant,
-                          fontWeight: canResume
-                              ? FontWeight.bold
-                              : FontWeight.normal,
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                        const SizedBox(height: 24),
 
-              Positioned(
-                bottom: 40,
-                left: 0,
-                right: 0,
-                child: Column(
-                  children: [
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 500),
-                      opacity: canResume ? 1.0 : 0.5,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: SizedBox(
-                          width: double.infinity,
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 600),
+                          opacity: isExtended ? 1.0 : 0.0,
+                          child: AnimatedSlide(
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutBack,
+                            offset: isExtended
+                                ? Offset.zero
+                                : const Offset(0, 0.2),
+                            child: Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: ambientColor.withAlpha(15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: ambientColor.withAlpha(30),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.visibility_off_rounded,
+                                    color: ambientColor,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'LOOK AWAY',
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: ambientColor,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 1.0,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Vagal tone struggling. Close your eyes and disconnect from the screen.',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: Colors.white70,
+                                                height: 1.4,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 4. ACTION CONTROLS
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+                    child: Row(
+                      children: [
+                        // Early End Session
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
+                                  duration: const Duration(milliseconds: 1500),
+                                  content: const Text(
+                                    'Long press to end session early.',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            onLongPress: () {
+                              if (_isNavigating) return;
+                              _isNavigating = true;
+                              HapticFeedback.heavyImpact();
+                              final duration = Duration(
+                                seconds: engine.sessionTotalFocusSeconds,
+                              );
+                              engine.endSession();
+                              Navigator.of(context).pushReplacement(
+                                PremiumPageRoute(
+                                  page: SessionReportPage(duration: duration),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              height: 64,
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest
+                                    .withAlpha(80),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withAlpha(15),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.stop_rounded,
+                                    size: 18,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "END",
+                                    style: TextStyle(
+                                      color: colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+
+                        // Resume Focus
+                        Expanded(
                           child: FilledButton.icon(
                             onPressed: canResume
                                 ? () {
-                                    HapticFeedback.lightImpact();
+                                    HapticFeedback.heavyImpact();
                                     engine.manualTransitionToFocus();
                                     Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(
-                                        builder: (_) => const FocusModePage(),
+                                      PremiumPageRoute(
+                                        page: const FocusModePage(),
                                       ),
                                     );
                                   }
                                 : () {
-                                    HapticFeedback.heavyImpact();
+                                    HapticFeedback.selectionClick();
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: const Text(
-                                          'Wait for vagal tone restoration...',
-                                        ),
-                                        backgroundColor: colorScheme.surface,
+                                        backgroundColor:
+                                            colorScheme.surfaceContainerHighest,
                                         duration: const Duration(seconds: 2),
+                                        content: Text(
+                                          'Wait for physiological clearance.',
+                                          style: TextStyle(
+                                            color: ambientColor,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
                                     );
                                   },
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 20),
-                              backgroundColor: canResume
-                                  ? colorScheme.primary
-                                  : colorScheme.surface,
-                              foregroundColor: canResume
-                                  ? colorScheme.onPrimary
-                                  : colorScheme.onSurfaceVariant,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: canResume
-                                    ? BorderSide.none
-                                    : BorderSide(
-                                        color: colorScheme.outlineVariant
-                                            .withAlpha(25),
-                                      ),
-                              ),
-                            ),
                             icon: Icon(
                               canResume
                                   ? Icons.play_arrow_rounded
-                                  : Icons.hourglass_empty_rounded,
+                                  : Icons.lock_outline_rounded,
+                              size: 18,
                             ),
                             label: Text(
-                              canResume ? 'RESUME SESSION' : 'RECALIBRATING...',
+                              canResume ? 'RESUME' : 'WAITING',
                               style: const TextStyle(
-                                letterSpacing: 1.5,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
+                                letterSpacing: 1.2,
                               ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: canResume
+                                  ? colorScheme.primary
+                                  : colorScheme.surfaceContainerHighest
+                                        .withAlpha(80),
+                              foregroundColor: canResume
+                                  ? colorScheme.onPrimary
+                                  : colorScheme.onSurfaceVariant.withAlpha(100),
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              elevation: 0,
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 24),
-
-                    GestureDetector(
-                      onLongPress: () {
-                        HapticFeedback.heavyImpact();
-                        context.read<CognitiveEngineProvider>().endSession();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withAlpha(13),
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: Colors.white.withAlpha(25)),
-                        ),
-                        child: const Text(
-                          "HOLD TO END",
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2.0,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

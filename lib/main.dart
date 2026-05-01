@@ -58,7 +58,7 @@ class FocusMaxxerApp extends StatelessWidget {
             context.read<SafteProvider>(),
             context.read<GlobalClockProvider>(),
             context.read<AnalyticsProvider>(),
-            scenario: SimulationScenario.optimalFlow,
+            scenario: SimulationScenario.acuteStress,
             context.read<DeviceHardwareService>(),
           ),
         ),

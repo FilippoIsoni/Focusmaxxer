@@ -107,6 +107,19 @@ class CognitiveEngineProvider extends ChangeNotifier
   String get advisoryMessage => _advisoryMessage;
   bool get isAfkWarningActive => _isAfkWarningActive;
 
+  bool get isDailyLimitReached =>
+      analytics.dailyWorkedSeconds >= SessionRulesEngine.dailyMaxSeconds;
+  int get remainingDailyMinutes =>
+      math.max(
+        0,
+        SessionRulesEngine.dailyMaxSeconds -
+            analytics.dailyWorkedSeconds -
+            (_activeBuffer?.totalFocusSeconds ?? 0),
+      ) ~/
+      60;
+  bool get isCalibrationPhase =>
+      (_activeBuffer?.totalFocusSeconds ?? 0) < calibrationWindowSeconds;
+
   SimulationScenario get activeScenario => _scenarioSimulator.currentScenario;
 
   /// Determines if the AFK condition happened during the critical baseline calibration phase

@@ -17,8 +17,10 @@ class AnalyticsTab extends StatelessWidget {
     return Consumer<AnalyticsProvider>(
       builder: (context, analytics, child) {
         final sessions = analytics.sessions;
+
+        // FIX: Leggiamo il dato giornaliero corretto, non il totale storico assoluto.
         final totalTime = SafteSemanticInterpreter.formatTotalTime(
-          analytics.totalFocusSeconds,
+          analytics.dailyWorkedSeconds,
         );
 
         return CustomScrollView(
@@ -165,9 +167,7 @@ class AnalyticsTab extends StatelessWidget {
                 ),
               ),
 
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 120),
-            ), // Bottom padding
+            const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         );
       },

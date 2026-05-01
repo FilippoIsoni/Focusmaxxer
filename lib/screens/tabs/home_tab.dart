@@ -326,13 +326,38 @@ class _FloatingStartButton extends StatelessWidget {
     final theme = Theme.of(context);
     final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
-    final engine = context.read<CognitiveEngineProvider>();
+    final engine = context.watch<CognitiveEngineProvider>();
 
     final double currentScore = safte
         .getStateAt(clock.currentTime)
         .effectiveness;
     final bool isEngineReady =
         currentScore >= SafteSemanticInterpreter.warningThreshold;
+    final bool isLimitReached = engine.isDailyLimitReached;
+
+    // --- GESTIONE DEI 3 STATI VISIVI ---
+    final Color buttonColor = isLimitReached || !isEngineReady
+        ? theme.colorScheme.surfaceContainerHighest
+        : theme.colorScheme.primary;
+
+    final Color textColor = isLimitReached
+        ? theme.colorScheme.error
+        : (isEngineReady
+              ? theme.colorScheme.onPrimary
+              : theme.colorScheme.secondary);
+
+    String buttonText;
+    IconData buttonIcon;
+    if (isLimitReached) {
+      buttonText = 'LIMIT REACHED (4H)';
+      buttonIcon = Icons.lock_clock_rounded;
+    } else if (!isEngineReady) {
+      buttonText = 'READINESS TOO LOW';
+      buttonIcon = Icons.battery_alert_rounded;
+    } else {
+      buttonText = 'START SESSION';
+      buttonIcon = Icons.power_settings_new_rounded;
+    }
 
     return Positioned(
       bottom: 0,
@@ -354,31 +379,67 @@ class _FloatingStartButton extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
         child: FilledButton(
           style: FilledButton.styleFrom(
-            // Inherits padding and shape from AppTheme. We only override colors based on state.
-            backgroundColor: isEngineReady
-                ? theme.colorScheme.primary
-                : theme.colorScheme.surfaceContainerHighest,
-            foregroundColor: isEngineReady
-                ? theme.colorScheme.onPrimary
-                : theme.colorScheme.onSurfaceVariant,
-            elevation: isEngineReady ? 8 : 0,
+            backgroundColor: buttonColor,
+            foregroundColor: textColor,
+            elevation: (isEngineReady && !isLimitReached) ? 8 : 0,
             shadowColor: theme.colorScheme.primary.withAlpha(100),
           ),
-          onPressed: isEngineReady
-              ? () {
-                  HapticFeedback.heavyImpact();
-                  engine.startSession();
-                  Navigator.of(
-                    context,
-                  ).push(PremiumPageRoute(page: const FocusModePage()));
-                }
-              : null,
-          child: const Row(
+          onPressed: () {
+            // 1. Blocco per Limite Giornaliero Superato
+            if (isLimitReached) {
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  content: Text(
+                    'Clinical limit of 4 hours reached. Prolonged focus beyond this point degrades neural pathways.',
+                    style: TextStyle(
+                      color: theme.colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+              return;
+            }
+
+            // 2. Blocco per Prontezza Cognitiva Insufficiente
+            if (!isEngineReady) {
+              HapticFeedback.selectionClick();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  content: Text(
+                    'Cognitive readiness too low. Wait for your biological battery to recharge before starting a new session.',
+                    style: TextStyle(
+                      color: theme.colorScheme.secondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+              return;
+            }
+
+            // 3. Avvio Normale Sessione
+            HapticFeedback.heavyImpact();
+            engine.startSession();
+            Navigator.of(
+              context,
+            ).push(PremiumPageRoute(page: const FocusModePage()));
+          },
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.power_settings_new_rounded),
-              SizedBox(width: 12),
-              Text('START SESSION'), // Style inherited from AppTheme
+              Icon(buttonIcon),
+              const SizedBox(width: 12),
+              Text(
+                buttonText,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ],
           ),
         ),
