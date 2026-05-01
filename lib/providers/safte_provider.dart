@@ -63,8 +63,6 @@ class SafteProvider extends ChangeNotifier {
     // Evita ricalcoli ridondanti se i dati sono identici a quelli in memoria
     if (_tWake == sWake && _tSleep == sSleep) return false;
 
-    print(" SAFTE: Rilevato periodo di sonno. Ricalcolo l'ancora biologica...");
-
     final serverBaseline = DailyBaseline(
       sleepEfficiency: sEff,
       bedTime: sSleep,

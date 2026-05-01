@@ -228,8 +228,9 @@ class CognitiveEngineProvider extends ChangeNotifier
       final int missedTicks = delta ~/ tickDurationSeconds;
       for (int i = 0; i < missedTicks; i++) {
         if (_currentState == EngineState.idle ||
-            _currentState == EngineState.sessionEnded)
+            _currentState == EngineState.sessionEnded) {
           break;
+        }
         _internalClock = _internalClock.add(
           const Duration(seconds: tickDurationSeconds),
         );
@@ -407,6 +408,12 @@ class CognitiveEngineProvider extends ChangeNotifier
   /// Restarts the entire session if baseline was corrupted by early movement
   void restartCalibration() {
     HapticFeedback.lightImpact();
+
+    // FIX Problema 3: Restituiamo i minuti rubati prima di riavviare!
+    if (_sessionTotalFocusSeconds > 0) {
+      analytics.rollbackWorkSeconds(_sessionTotalFocusSeconds);
+    }
+
     resetEngine();
     startSession();
   }
@@ -414,6 +421,12 @@ class CognitiveEngineProvider extends ChangeNotifier
   /// Aborts the session without saving if abandoned during calibration
   void abortCalibrationSession() {
     HapticFeedback.heavyImpact();
+
+    // FIX Problema 3: Restituiamo i minuti rubati prima di uscire!
+    if (_sessionTotalFocusSeconds > 0) {
+      analytics.rollbackWorkSeconds(_sessionTotalFocusSeconds);
+    }
+
     resetEngine();
   }
 
