@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../providers/cognitive_engine_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/analytics_provider.dart';
+import '../providers/safte_provider.dart';
+import '../providers/clock_provider.dart';
 
 import 'profile_page.dart';
 import 'focus_mode_page.dart';
@@ -202,8 +204,16 @@ class _ReadinessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final engine = context.watch<CognitiveEngineProvider>();
-    final double score = engine.currentEffectiveness;
+    // 1. Ascolta i battiti dell'orologio
+    final clock = context.watch<GlobalClockProvider>();
+    final safte = context.read<SafteProvider>();
+
+    // 2. Leggi il valore esatto in questo preciso istante finto
+    final double rawScore = safte.getStateAt(clock.currentTime).effectiveness;
+
+    // 3. Arrotonda il valore matematico per l'UI.
+    // L'animazione si attiverà SOLO quando l'efficacia scende di un numero intero.
+    final double score = rawScore.floorToDouble();
 
     final dynamicColor = SafteSemanticInterpreter.getEffectivenessColor(
       score,
@@ -324,10 +334,17 @@ class _KeyFactorsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final engine = context.watch<CognitiveEngineProvider>();
-    final safte = engine.safteSnapshot;
 
-    final double reservoirRatio = safte.reservoir / engine.capacityMax;
+    // 1. Ascoltiamo il tempo globale per garantire l'animazione live
+    final clock = context.watch<GlobalClockProvider>();
+    final safte = context.read<SafteProvider>();
+    final engine = context.read<CognitiveEngineProvider>();
+
+    // 2. Estraiamo lo stato biologico ESATTO per l'orario attuale (reale o simulato)
+    final currentState = safte.getStateAt(clock.currentTime);
+
+    // 3. Calcoliamo i rapporti per la UI
+    final double reservoirRatio = currentState.reservoir / engine.capacityMax;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -362,7 +379,7 @@ class _KeyFactorsSection extends StatelessWidget {
           title: 'Circadian Rhythm',
           description: 'Hormonal alignment with time of day.',
           statusLabel: SafteSemanticInterpreter.getCircadianStatus(
-            safte.circadianValue,
+            currentState.circadianValue, // Usiamo lo stato live!
           ),
           statusColor: theme.colorScheme.tertiary,
         ),
@@ -372,7 +389,7 @@ class _KeyFactorsSection extends StatelessWidget {
           title: 'Sleep Inertia',
           description: 'Post-awakening cognitive penalty.',
           statusLabel: SafteSemanticInterpreter.getInertiaStatus(
-            engine.wakeupTime,
+            safte.wakeupTime, // Leggiamo il risveglio dal Biologo
           ),
           statusColor: theme.colorScheme.secondary,
         ),

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/impact_api_service.dart';
 import 'services/simulator_service.dart';
-
-import 'package:shared_preferences/shared_preferences.dart'; 
 
 import 'providers/auth_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
 import 'providers/analytics_provider.dart';
 import 'providers/safte_provider.dart';
+import 'providers/clock_provider.dart'; // <-- Il nuovo orologio globale
 
 import 'screens/onboarding_page.dart';
 import 'screens/login_page.dart';
@@ -18,69 +18,75 @@ import 'screens/home_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Estraiamo la memoria una sola volta all'avvio
   final prefs = await SharedPreferences.getInstance();
   runApp(FocusMaxxerApp(prefs: prefs));
 }
 
 class FocusMaxxerApp extends StatelessWidget {
   final SharedPreferences prefs;
-
   const FocusMaxxerApp({super.key, required this.prefs});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // 1. Network Layer (API)
+        // 1. Network Layer
         Provider<ImpactApiService>(create: (_) => ImpactApiService()),
 
-        // 2. Time Infrastructure (Accelerated Simulator at 60x for TDD)
-        Provider<WarpTickerService>(
-          create: (_) => WarpTickerService(speedMultiplier: 60.0),
-          dispose: (_, service) => service.dispose(),
+        // 2. Orologio Globale (Sostituisce definitivamente WarpTickerService)
+        ChangeNotifierProvider<GlobalClockProvider>(
+          create: (_) =>
+              GlobalClockProvider(speedMultiplier: 60.0, virtualTickSeconds: 5),
         ),
 
-        // 3. Orologio Biologico (Inizializzato prima del Cognitive Engine)
+        // 3. Moduli di Dominio (Indipendenti)
         ChangeNotifierProvider<SafteProvider>(
           create: (_) => SafteProvider(prefs),
         ),
+        ChangeNotifierProvider<AnalyticsProvider>(
+          create: (_) => AnalyticsProvider(prefs),
+        ),
 
-        // 3. Central Cognitive Engine (Dipende dal Ticker E dal SafteProvider)
-        ChangeNotifierProxyProvider2<WarpTickerService, SafteProvider, CognitiveEngineProvider>(
+        // 4. Authentication State Manager (Iniettato correttamente per la UI)
+        ChangeNotifierProvider<AuthProvider>(
+          create: (_) => AuthProvider(prefs),
+        ),
+
+        // 5. Central Cognitive Engine
+        // Usa ProxyProvider3 per ricevere: Clock, Safte e Analytics (IL FIX DELL'ERRORE)
+        ChangeNotifierProxyProvider3<
+          GlobalClockProvider,
+          SafteProvider,
+          AnalyticsProvider,
+          CognitiveEngineProvider
+        >(
           create: (context) => CognitiveEngineProvider(
             context.read<SafteProvider>(),
-            context.read<WarpTickerService>(),
-            prefs,
+            context.read<GlobalClockProvider>(),
+            context
+                .read<
+                  AnalyticsProvider
+                >(), // <-- Passiamo l'Analytics, non le prefs!
             scenario: SimulationScenario.acuteStress,
           ),
-          update: (context, ticker, safte, previousEngine) =>
+          update: (context, clock, safte, analytics, previousEngine) =>
               previousEngine ??
               CognitiveEngineProvider(
                 safte,
-                ticker,
-                prefs,
+                clock,
+                analytics, // <-- Aggiornato anche qui
                 scenario: SimulationScenario.acuteStress,
               ),
         ),
-
-        // 4. Authentication State Manager 
-        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider(prefs)),
-        
-        // 5. Analytics Manager
-        ChangeNotifierProvider<AnalyticsProvider>(
-          create: (_) => AnalyticsProvider(),
-        ),
       ],
-
-      // 5. Theme Injection & Dynamic Routing
+      // Theme Injection & Routing
       child: MaterialApp(
         title: 'FocusMaxxer',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
-
-          // Applies global typography and overrides pure white with soft light gray
           textTheme:
               GoogleFonts.plusJakartaSansTextTheme(
                 ThemeData.dark().textTheme,
@@ -88,22 +94,18 @@ class FocusMaxxerApp extends StatelessWidget {
                 bodyColor: const Color(0xFFE2E8F0),
                 displayColor: const Color(0xFFF8FAFC),
               ),
-
-          scaffoldBackgroundColor: const Color(0xFF0F141E), // Deep Slate
-
+          scaffoldBackgroundColor: const Color(0xFF0F141E),
           colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF2DD4BF), // Teal - Optimal Focus Mode
-            onPrimary: Color(0xFF0F141E), // Dark text on primary buttons
-            secondary: Color(0xFFFBBF24), // Amber - Fatigue warning
+            primary: Color(0xFF2DD4BF),
+            onPrimary: Color(0xFF0F141E),
+            secondary: Color(0xFFFBBF24),
             onSecondary: Color(0xFF0F141E),
-            tertiary: Color(0xFF38BDF8), // Light Blue - Neutral/Info elements
-            surface: Color(0xFF1E2433), // Onyx - Card and Input backgrounds
+            tertiary: Color(0xFF38BDF8),
+            surface: Color(0xFF1E2433),
             onSurface: Color(0xFFE2E8F0),
-            error: Color(0xFFF43F5E), // Rose - Critical break required
+            error: Color(0xFFF43F5E),
             onError: Colors.white,
           ),
-
-          // Global Button Styling
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
               elevation: 0,
@@ -118,8 +120,6 @@ class FocusMaxxerApp extends StatelessWidget {
               ),
             ),
           ),
-
-          // Global Text Input Styling
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
             fillColor: const Color(0xFF1E2433),
@@ -138,8 +138,6 @@ class FocusMaxxerApp extends StatelessWidget {
             labelStyle: const TextStyle(color: Color(0xFF64748B)),
             prefixIconColor: const Color(0xFF64748B),
           ),
-
-          // Global SnackBar Styling
           snackBarTheme: SnackBarThemeData(
             backgroundColor: const Color(0xFF1E2433),
             contentTextStyle: const TextStyle(
@@ -152,47 +150,30 @@ class FocusMaxxerApp extends StatelessWidget {
             behavior: SnackBarBehavior.floating,
           ),
         ),
-        // Dynamic Router for Authentication Flow
-        home: const AppEntryGate(),
+        // Passiamo le prefs direttamente all'EntryGate per uno snellimento della UI
+        home: AppEntryGate(prefs: prefs),
       ),
     );
   }
 }
 
-/// AppEntryGate Widget: Determines the initial screen based on authentication status.
+/// AppEntryGate Semplificato: Nessun FutureBuilder, rendering istantaneo
 class AppEntryGate extends StatelessWidget {
-  const AppEntryGate({super.key});
+  final SharedPreferences prefs;
+  const AppEntryGate({super.key, required this.prefs});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<SharedPreferences>(
-      future: SharedPreferences.getInstance(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
-            ),
-          );
-        }
-        
-        if (snapshot.hasData) {
-          final prefs = snapshot.data!;
-          final isFirstTime = prefs.getBool('isFirstTime') ?? true;
-          final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+    final isFirstTime = prefs.getBool('isFirstTime') ?? true;
+    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
-          if (isFirstTime) return const OnboardingPage();
-          if (isLoggedIn) return const ClinicalBootloader();
-          return const LoginPage();
-        }
-
-        return const LoginPage();
-      },
-    );
+    if (isFirstTime) return const OnboardingPage();
+    if (isLoggedIn) return const ClinicalBootloader();
+    return const LoginPage();
   }
 }
 
-/// Bootloader Widget: Blocks UI access until biological parameters are fetched from the server.
+/// Bootloader Widget: Sincronizza i dati e fa da ponte
 class ClinicalBootloader extends StatefulWidget {
   const ClinicalBootloader({super.key});
 
@@ -218,8 +199,9 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
 
     try {
       final api = context.read<ImpactApiService>();
-      final safte = context.read<SafteProvider>(); 
-      final engine = context.read<CognitiveEngineProvider>(); // <-- Aggiungi il riferimento all'engine
+      final safte = context.read<SafteProvider>();
+      final analytics = context
+          .read<AnalyticsProvider>(); // <-- Ora leggiamo l'Analytics
 
       final baseline = await api.fetchMorningBaseline();
 
@@ -230,13 +212,12 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
         sEff: baseline.sleepEfficiency,
         isMainSleep: baseline.mainSleep,
       );
-      
-      // SE è un nuovo giorno, azzera i minuti di lavoro!
+
+      // SE è un nuovo giorno biologico, chiede al contabile di azzerare i minuti!
       if (isNewDay) {
-        await engine.resetDailyWork();
+        await analytics.resetDailyWork();
       }
-      
-    } catch (e) { 
+    } catch (e) {
       _errorMessage = e.toString();
     } finally {
       if (mounted) {
@@ -304,4 +285,4 @@ class _ClinicalBootloaderState extends State<ClinicalBootloader> {
     // Initialization successful, proceed to the main Dashboard
     return const HomeDashboard();
   }
-}//end of main.dart
+}
