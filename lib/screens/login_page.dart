@@ -1,9 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import '../main.dart';
 
+import '../providers/auth_provider.dart';
+import 'bootloader_screen.dart';
+
+/// Authenticates the user and initiates the telemetry synchronization pipeline.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -25,51 +28,61 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// Processes credentials and routes to the Bootloader on success
   Future<void> _handleLogin() async {
-    // 1. Dismiss keyboard immediately
     FocusScope.of(context).unfocus();
+
+    // Prevent empty submissions
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
+      HapticFeedback.selectionClick();
+      return;
+    }
+
     setState(() => _isLoading = true);
+    HapticFeedback.lightImpact();
 
     try {
-      // 2. Await the Provider authentication
       await context.read<AuthProvider>().login(
-        _emailController.text,
+        _emailController.text.trim(),
         _passwordController.text,
       );
 
       if (!mounted) return;
 
-      // 4. Navigazione Imperativa: Sostituisci il Login con il Bootloader
+      // Route to Bootloader to fetch biometric data and synchronize the engine
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ClinicalBootloader()),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const BootloaderScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 600),
+        ),
       );
-
-   
     } catch (e) {
       if (!mounted) return;
-
-      // Reset loading state to allow retry
       setState(() => _isLoading = false);
 
-      final theme = Theme.of(context);
+      final colorScheme = Theme.of(context).colorScheme;
+
+      // Styling is inherited from AppTheme.snackBarTheme
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              Icon(Icons.error_outline, color: theme.colorScheme.onError),
+              Icon(Icons.error_outline_rounded, color: colorScheme.onError),
               const SizedBox(width: 12),
-              Expanded(
+              const Expanded(
                 child: Text(
                   'Invalid credentials. Please try again.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onError,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
             ],
           ),
-          backgroundColor: theme.colorScheme.error,
+          backgroundColor: colorScheme.error,
         ),
       );
     }
@@ -81,13 +94,13 @@ class _LoginPageState extends State<LoginPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
+      // Background color inherited from AppTheme
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.opaque,
         child: Stack(
           children: [
             // --- AMBIENT GLOW BACKGROUND ---
-            // Replicates the premium cinematic lighting from the Onboarding page
             Positioned(
               top: 100,
               left: MediaQuery.of(context).size.width / 2 - 150,
@@ -129,38 +142,41 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // --- FINGERPRINT ICON ---
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: colorScheme.primary.withAlpha(51),
-                              width: 1,
+                        // --- BRAND ICON ---
+                        Align(
+                          alignment: Alignment.center,
+                          child: Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: colorScheme.primary.withAlpha(51),
+                                width: 1,
+                              ),
+                              color: colorScheme.surface.withAlpha(150),
                             ),
-                            color: colorScheme.surface.withAlpha(150),
-                          ),
-                          child: Icon(
-                            Icons.fingerprint_rounded,
-                            size: 64,
-                            color: colorScheme.primary,
+                            child: Icon(
+                              Icons.fingerprint_rounded,
+                              size: 64,
+                              color: colorScheme.primary,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 24),
 
-                        // --- BRANDING ---
+                        // --- BRAND TITLE ---
                         Text(
                           'FOCUSMAXXER',
                           textAlign: TextAlign.center,
+                          // Inherits w900 and letterSpacing from AppTheme.textTheme
                           style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 3.0,
                             color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 60),
 
                         // --- INPUT FIELDS ---
+                        // Decoration and styling inherited from AppTheme.inputDecorationTheme
                         TextFormField(
                           controller: _emailController,
                           textInputAction: TextInputAction.next,
@@ -168,11 +184,10 @@ class _LoginPageState extends State<LoginPage> {
                           enabled: !_isLoading,
                           decoration: const InputDecoration(
                             labelText: 'Username or Email',
-                            prefixIcon: Icon(Icons.person_outline),
+                            prefixIcon: Icon(Icons.person_outline_rounded),
                           ),
                         ),
                         const SizedBox(height: 24),
-
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
@@ -181,17 +196,19 @@ class _LoginPageState extends State<LoginPage> {
                           enabled: !_isLoading,
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            prefixIcon: const Icon(Icons.lock_outline_rounded),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
+                                    ? Icons.visibility_off_rounded
+                                    : Icons.visibility_rounded,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                               onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
+                                HapticFeedback.selectionClick();
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                             ),
                           ),
@@ -202,14 +219,13 @@ class _LoginPageState extends State<LoginPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: _isLoading ? null : () {},
-                            child: Text(
-                              'Forgot Password?',
-                              style: TextStyle(
-                                color: colorScheme.onSurface.withAlpha(179),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    HapticFeedback.lightImpact();
+                                  },
+                            // Styling inherited from AppTheme.textButtonTheme
+                            child: const Text('Forgot Password?'),
                           ),
                         ),
                         const SizedBox(height: 32),
@@ -219,10 +235,7 @@ class _LoginPageState extends State<LoginPage> {
                           height: 56,
                           child: FilledButton(
                             onPressed: _isLoading ? null : _handleLogin,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: colorScheme.primary,
-                              foregroundColor: colorScheme.onPrimary,
-                            ),
+                            // Styling inherited from AppTheme.filledButtonTheme
                             child: _isLoading
                                 ? SizedBox(
                                     height: 24,
@@ -232,13 +245,7 @@ class _LoginPageState extends State<LoginPage> {
                                       color: colorScheme.onPrimary,
                                     ),
                                   )
-                                : const Text(
-                                    'LOGIN',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
+                                : const Text('LOGIN'),
                           ),
                         ),
                         const SizedBox(height: 40),

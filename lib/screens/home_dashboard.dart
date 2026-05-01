@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/analytics_tab.dart';
 
-/// Extremely lightweight shell for the main application entry point.
+/// Lightweight shell for the main application entry point.
 /// Manages Bottom Navigation and the core background ambiance.
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
@@ -38,7 +38,6 @@ class _HomeDashboardState extends State<HomeDashboard> {
     if (_currentIndex == index) return;
     HapticFeedback.selectionClick();
     setState(() => _currentIndex = index);
-
     _pageController.animateToPage(
       index,
       duration: const Duration(milliseconds: 400),
@@ -51,10 +50,9 @@ class _HomeDashboardState extends State<HomeDashboard> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
       body: Stack(
         children: [
-          // --- AMBIENT GLOW SYSTEM (GPU OPTIMIZED) ---
+          // --- AMBIENT GLOW SYSTEM ---
           Positioned(
             top: -150,
             right: -100,
@@ -65,8 +63,8 @@ class _HomeDashboardState extends State<HomeDashboard> {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    theme.colorScheme.primary.withAlpha(45), // Luminous center
-                    theme.colorScheme.primary.withAlpha(0), // Fades to nothing
+                    theme.colorScheme.primary.withAlpha(45),
+                    theme.colorScheme.primary.withAlpha(0),
                   ],
                   stops: const [0.2, 1.0],
                 ),
@@ -85,22 +83,19 @@ class _HomeDashboardState extends State<HomeDashboard> {
       ),
 
       // --- NAVIGATION BAR ---
+      // Styling is 100% inherited from AppTheme.navigationBarTheme
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        backgroundColor: theme.colorScheme.surface,
-        elevation: 8,
-        shadowColor: Colors.black,
-        indicatorColor: theme.colorScheme.primary.withAlpha(38),
         onDestinationSelected: _updateTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home_rounded),
             label: 'Home',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
+            selectedIcon: Icon(Icons.analytics_rounded),
             label: 'Analytics',
           ),
         ],

@@ -5,11 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/analytics_provider.dart';
-import '../utils/dashboard_helpers.dart'; // <--- FIX: Corretta importazione del Router
+import '../utils/dashboard_helpers.dart';
 import '../utils/settings_components.dart';
 import 'login_page.dart';
 
-/// Manages the user's local identity and system connections.
+/// Manages the user's local identity, system connections, and developer tools.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -56,7 +56,6 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  /// Triggers a state update if current text field values deviate from initial values.
   void _checkForChanges() {
     final bool hasChanges =
         _nameController.text.trim() != _initialName ||
@@ -72,7 +71,6 @@ class _ProfilePageState extends State<ProfilePage> {
   // CORE DOMAIN ACTIONS
   // ==========================================
 
-  /// Persists local user identity changes.
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() ||
         _isProcessing ||
@@ -95,8 +93,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _initialName = _nameController.text.trim();
       _initialSurname = _surnameController.text.trim();
       _initialNickname = _nicknameController.text.trim();
-      _checkForChanges();
 
+      _checkForChanges();
       _showCustomSnackBar('Profile securely updated', isError: false);
     } catch (e) {
       _showCustomSnackBar(
@@ -108,15 +106,12 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Irreversibly deletes local personal data.
   Future<void> _clearPersonalData() async {
     if (_isProcessing) return;
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
 
-    // Cache the provider before the async gap to prevent mounted context crashes
     final authProvider = context.read<AuthProvider>();
-
     final bool? confirm = await _showWarningDialog(
       title: 'Purge Identity Data?',
       content:
@@ -125,6 +120,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm != true || !mounted) return;
+
     setState(() => _isProcessing = true);
 
     try {
@@ -137,8 +133,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _nameController.clear();
       _surnameController.clear();
       _nicknameController.text = 'Student';
-      _checkForChanges();
 
+      _checkForChanges();
       _showCustomSnackBar('Identity purged successfully', isError: true);
     } catch (e) {
       _showCustomSnackBar('Critical error during deletion.', isError: true);
@@ -147,13 +143,11 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// Safely flushes telemetry to disk and terminates the active user session.
   Future<void> _handleLogout() async {
     if (_isProcessing) return;
     FocusScope.of(context).unfocus();
     HapticFeedback.heavyImpact();
 
-    // Cache providers before the async gap
     final analyticsProvider = context.read<AnalyticsProvider>();
     final authProvider = context.read<AuthProvider>();
 
@@ -164,6 +158,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm != true || !mounted) return;
+
     setState(() => _isProcessing = true);
 
     try {
@@ -203,18 +198,12 @@ class _ProfilePageState extends State<ProfilePage> {
             Expanded(
               child: Text(
                 message,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
         ),
-        behavior: SnackBarBehavior.floating,
         backgroundColor: isError ? colorScheme.error : colorScheme.primary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       ),
     );
   }
@@ -229,44 +218,31 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (context) {
         final theme = Theme.of(context);
         return AlertDialog(
-          backgroundColor: theme.colorScheme.surfaceContainerHigh,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
           title: Text(
             title,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
             ),
           ),
           content: Text(
             content,
-            style: const TextStyle(color: Colors.white70, height: 1.5),
+            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'CANCEL',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: const Text('CANCEL'),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: theme.colorScheme.error,
               ),
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                confirmText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
-              ),
+              child: Text(confirmText),
             ),
           ],
         );
@@ -277,6 +253,7 @@ class _ProfilePageState extends State<ProfilePage> {
   // ==========================================
   // VIEW RENDERER
   // ==========================================
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -296,12 +273,12 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       },
       child: Scaffold(
-        backgroundColor: colorScheme.surface,
         body: GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
+              // --- AMBIENT GLOW ---
               Positioned(
                 top: -150,
                 left: -50,
@@ -320,6 +297,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
               ),
+
               CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
@@ -327,7 +305,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     pinned: true,
                     stretch: true,
                     expandedHeight: 120.0,
-                    backgroundColor: Colors.transparent,
                     leading: IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new_rounded),
                       onPressed: () {
@@ -342,12 +319,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
                         child: FlexibleSpaceBar(
-                          title: const Text(
+                          title: Text(
                             'Identity',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 18,
-                              letterSpacing: 0.5,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                           centerTitle: true,
@@ -362,6 +337,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 64.0),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
+                        // --- AVATAR ---
                         Center(
                           child: Stack(
                             alignment: Alignment.bottomRight,
@@ -406,14 +382,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 48),
+
+                        // --- PERSONAL DATA FORM ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
                             'PERSONAL DATA',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 1.5,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -448,6 +424,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         const SizedBox(height: 24),
+
+                        // --- SAVE BUTTON ---
                         AnimatedOpacity(
                           duration: const Duration(milliseconds: 300),
                           opacity: _hasUnsavedChanges ? 1.0 : 0.4,
@@ -456,13 +434,6 @@ class _ProfilePageState extends State<ProfilePage> {
                             height: 56,
                             child: FilledButton(
                               onPressed: _saveProfile,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: colorScheme.primary,
-                                foregroundColor: colorScheme.onPrimary,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                              ),
                               child: _isProcessing
                                   ? SizedBox(
                                       width: 24,
@@ -472,25 +443,32 @@ class _ProfilePageState extends State<ProfilePage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text(
-                                      'SAVE CHANGES',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.5,
-                                      ),
-                                    ),
+                                  : const Text('SAVE CHANGES'),
                             ),
                           ),
                         ),
                         const SizedBox(height: 48),
+
+                        // --- DEVELOPER TOOLS (SIMULATOR) ---
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, bottom: 8),
+                          child: Text(
+                            'DEVELOPER TOOLS',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.tertiary,
+                            ),
+                          ),
+                        ),
+                        const SettingsGroup(children: [SimulatorSettingsRow()]),
+                        const SizedBox(height: 48),
+
+                        // --- SYSTEM SETTINGS ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
                             'SYSTEM SETTINGS',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 1.5,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),

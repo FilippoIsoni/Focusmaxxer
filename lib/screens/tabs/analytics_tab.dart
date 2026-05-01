@@ -55,9 +55,7 @@ class AnalyticsTab extends StatelessWidget {
                     children: [
                       Text(
                         'TOTAL DEEP WORK TODAY',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          letterSpacing: 1.5,
-                          fontWeight: FontWeight.bold,
+                        style: theme.textTheme.labelMedium?.copyWith(
                           color: colorScheme.primary,
                         ),
                       ),
@@ -169,7 +167,7 @@ class AnalyticsTab extends StatelessWidget {
 
             const SliverToBoxAdapter(
               child: SizedBox(height: 120),
-            ), // Bottom padding for Nav Bar
+            ), // Bottom padding
           ],
         );
       },

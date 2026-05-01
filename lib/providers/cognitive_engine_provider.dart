@@ -116,6 +116,8 @@ class CognitiveEngineProvider extends ChangeNotifier
   bool get isCalibrationAnomaly =>
       _isAfkWarningActive && _elapsedFocusSeconds <= calibrationWindowSeconds;
 
+  SimulationScenario get activeScenario => _scenarioSimulator.currentScenario;
+
   int get currentSessionSeconds {
     if (_currentState == EngineState.analyzingBaseline ||
         _currentState == EngineState.focus) {

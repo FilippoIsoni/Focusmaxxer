@@ -2,31 +2,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'login_page.dart';
+
+import '../models/onboarding_data.dart';
+import '../utils/onboarding_slide.dart';
 import '../providers/auth_provider.dart';
+import 'login_page.dart';
 
-// ==========================================
-// 1. DATA MODEL
-// ==========================================
-class OnboardingData {
-  final String superTitle;
-  final String title;
-  final String description;
-  final IconData icon;
-  final Color themeColor;
-
-  const OnboardingData({
-    required this.superTitle,
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.themeColor,
-  });
-}
-
-// ==========================================
-// 2. MAIN ONBOARDING SCREEN
-// ==========================================
+/// Orchestrates the introduction flow, teaching the user the core philosophy
+/// of the application before requesting authentication.
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -37,7 +20,7 @@ class OnboardingPage extends StatefulWidget {
 class _OnboardingPageState extends State<OnboardingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  bool _isFinishing = false; // Previene il routing multiplo (Double-tap bug)
+  bool _isFinishing = false; // Prevents double-tap routing bugs
 
   late final List<OnboardingData> _pages;
 
@@ -46,7 +29,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.didChangeDependencies();
     final colorScheme = Theme.of(context).colorScheme;
 
-    // Inizializza i dati usando i colori del tema globale
+    // Initialize content using the global theme colors
     _pages = [
       OnboardingData(
         superTitle: 'THE SAFTE™ ENGINE',
@@ -70,7 +53,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         description:
             'Once a session begins, commitment is required. Follow the AI advisory system: focus when optimal, rest when warned. Press and hold the bottom button to finalize your session.',
         icon: Icons.shield_rounded,
-        themeColor: colorScheme.tertiary, // Light Blue
+        themeColor: colorScheme.tertiary, // Sky Blue
       ),
     ];
   }
@@ -81,23 +64,30 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
+  /// Finalizes onboarding, saves the state to disk, and transitions to Login
   Future<void> _finishOnboarding() async {
     if (_isFinishing) return;
     setState(() => _isFinishing = true);
     HapticFeedback.mediumImpact();
-    // 1. Salva in memoria che l'onboarding è stato completato
+
     await context.read<AuthProvider>().completeOnboarding();
-  // 2. Sicurezza: controlla che l'utente non abbia chiuso la pagina 
-  // mentre il database salvava i dati.
+
     if (!mounted) return;
-  // 3. NAVIGAZIONE MANUALE (Imperativa)
-  // Usiamo pushReplacement perché non vogliamo che l'utente possa 
-  // tornare indietro all'onboarding premendo il tasto "Back".
+
+    // Imperative navigation: Replace the route so the user cannot swipe back
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const LoginPage(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 600),
+      ),
     );
   }
 
+  /// Advances to the next slide or finishes if at the end
   void _nextPage() {
     if (_currentPage == _pages.length - 1) {
       _finishOnboarding();
@@ -117,11 +107,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
     final currentData = _pages[_currentPage];
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
           // --- AMBIENT GLOW BACKGROUND ---
-          // Creates a cinematic, breathing light effect behind the content
+          // Creates a cinematic, breathing light effect that follows the current theme color
           AnimatedPositioned(
             duration: const Duration(milliseconds: 800),
             curve: Curves.easeInOutCubic,
@@ -145,7 +134,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
           ),
 
-          // --- CONTENT SCROLLER ---
+          // --- FOREGROUND CONTENT ---
           SafeArea(
             child: Column(
               children: [
@@ -162,14 +151,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           : 1.0,
                       child: TextButton(
                         onPressed: _finishOnboarding,
-                        child: Text(
-                          'Skip',
-                          style: TextStyle(
-                            color: colorScheme.onSurface.withAlpha(150),
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
+                        // Styling is automatically inherited from AppTheme.textButtonTheme
+                        child: const Text('Skip'),
                       ),
                     ),
                   ),
@@ -185,7 +168,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     },
                     itemCount: _pages.length,
                     itemBuilder: (context, index) {
-                      return _OnboardingSlideWidget(
+                      return OnboardingSlide(
                         data: _pages[index],
                         isActive: _currentPage == index,
                       );
@@ -225,12 +208,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         child: FilledButton.icon(
                           onPressed: _isFinishing ? null : _nextPage,
                           style: FilledButton.styleFrom(
+                            // Inherits padding, shape, and textStyle from AppTheme.filledButtonTheme
                             backgroundColor: currentData.themeColor,
                             foregroundColor: colorScheme.surface,
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
                           ),
                           iconAlignment: IconAlignment.end,
                           icon: _isFinishing
@@ -253,10 +233,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             _currentPage == _pages.length - 1
                                 ? 'START'
                                 : 'NEXT',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
                           ),
                         ),
                       ),
@@ -264,102 +240,6 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ==========================================
-// 3. INDIVIDUAL SLIDE WIDGET
-// ==========================================
-class _OnboardingSlideWidget extends StatelessWidget {
-  final OnboardingData data;
-  final bool isActive;
-
-  const _OnboardingSlideWidget({required this.data, required this.isActive});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- ICON ANIMATION ---
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.5, end: isActive ? 1.0 : 0.8),
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.easeOutBack,
-            builder: (context, scale, child) {
-              return Transform.scale(
-                scale: scale,
-                alignment: Alignment.centerLeft,
-                child: Opacity(
-                  opacity: isActive ? 1.0 : 0.0,
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: data.themeColor.withAlpha(25),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: data.themeColor.withAlpha(50),
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(data.icon, size: 48, color: data.themeColor),
-                  ),
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 48),
-
-          // --- TEXT ANIMATIONS ---
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 500),
-            opacity: isActive ? 1.0 : 0.0,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeOutCubic,
-              offset: isActive ? Offset.zero : const Offset(0, 0.2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    data.superTitle,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: data.themeColor,
-                      letterSpacing: 2.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    data.title,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      height: 1.1,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    data.description,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurface.withAlpha(179),
-                      height: 1.6,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],

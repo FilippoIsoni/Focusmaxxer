@@ -106,13 +106,14 @@ class PremiumSliverAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return SliverAppBar(
       pinned: true,
       stretch: true,
       expandedHeight: 160.0,
-      toolbarHeight: 76.0, // Prevents text crushing when collapsed
+      toolbarHeight: 76.0,
       backgroundColor: colorScheme.surface.withAlpha(160),
       flexibleSpace: ClipRect(
         child: BackdropFilter(
@@ -130,9 +131,8 @@ class PremiumSliverAppBar extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
                   ),
                 ),
                 if (subtitle != null)
@@ -140,8 +140,7 @@ class PremiumSliverAppBar extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
+                    style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: colorScheme.primary,
                     ),
@@ -161,7 +160,6 @@ class PremiumSliverAppBar extends StatelessWidget {
           ),
           child: IconButton(
             icon: Icon(actionIcon, size: 20, color: Colors.white),
-            tooltip: 'Action',
             onPressed: onActionTap,
           ),
         ),

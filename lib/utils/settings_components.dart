@@ -1,5 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/cognitive_engine_provider.dart';
+import '../services/simulator_service.dart';
 
 /// ==========================================
 /// SETTINGS GROUP
@@ -57,7 +62,8 @@ class SettingsTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Column(
       children: [
@@ -73,22 +79,24 @@ class SettingsTextField extends StatelessWidget {
                   textInputAction: action,
                   onFieldSubmitted: onSubmitted,
                   enabled: isEnabled,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+                  // Inherits bodyLarge from theme
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                   cursorColor: colorScheme.primary,
                   decoration: InputDecoration(
                     labelText: label,
-                    labelStyle: TextStyle(
+                    labelStyle: theme.textTheme.bodyMedium?.copyWith(
                       color: colorScheme.onSurfaceVariant.withAlpha(150),
-                      fontSize: 13,
                     ),
                     floatingLabelBehavior: FloatingLabelBehavior.always,
                     border: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    enabledBorder: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     isDense: true,
+                    filled:
+                        false, // Override the default filled background for groups
                   ),
                 ),
               ),
@@ -109,13 +117,14 @@ class SettingsTextField extends StatelessWidget {
 
 /// ==========================================
 /// SETTINGS ACTION ROW
-/// A stylized clickable row for destructive actions (Logout/Purge).
+/// A stylized clickable row for actions (Logout/Purge).
 /// ==========================================
 class SettingsActionRow extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback? onTap;
   final bool isLast;
+  final bool isDestructive;
 
   const SettingsActionRow({
     super.key,
@@ -123,37 +132,39 @@ class SettingsActionRow extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.isLast = false,
+    this.isDestructive = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final rowColor = isDestructive ? colorScheme.error : colorScheme.onSurface;
 
     return InkWell(
       onTap: onTap,
-      highlightColor: colorScheme.error.withAlpha(20),
-      splashColor: colorScheme.error.withAlpha(30),
+      highlightColor: rowColor.withAlpha(20),
+      splashColor: rowColor.withAlpha(30),
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             child: Row(
               children: [
-                Icon(icon, color: colorScheme.error.withAlpha(220), size: 22),
+                Icon(icon, color: rowColor.withAlpha(220), size: 22),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(
                     label,
-                    style: TextStyle(
-                      fontSize: 15,
+                    style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: colorScheme.error.withAlpha(220),
+                      color: rowColor.withAlpha(220),
                     ),
                   ),
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
-                  color: colorScheme.error.withAlpha(100),
+                  color: rowColor.withAlpha(100),
                   size: 20,
                 ),
               ],
@@ -164,10 +175,83 @@ class SettingsActionRow extends StatelessWidget {
               height: 1,
               indent: 56,
               endIndent: 20,
-              color: colorScheme.error.withAlpha(20),
+              color: rowColor.withAlpha(20),
             ),
         ],
       ),
     );
+  }
+}
+
+/// ==========================================
+/// SIMULATOR SETTINGS ROW
+/// A dropdown to dynamically change the testing scenario.
+/// ==========================================
+class SimulatorSettingsRow extends StatelessWidget {
+  const SimulatorSettingsRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final engine = context.watch<CognitiveEngineProvider>();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.science_rounded, color: colorScheme.tertiary, size: 22),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Active Scenario",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withAlpha(150),
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<SimulationScenario>(
+                    value: engine.activeScenario,
+                    isExpanded: true,
+                    dropdownColor: colorScheme.surfaceContainerHighest,
+                    icon: Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: colorScheme.tertiary,
+                    ),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    items: SimulationScenario.values.map((scenario) {
+                      return DropdownMenuItem(
+                        value: scenario,
+                        child: Text(_formatScenarioName(scenario.name)),
+                      );
+                    }).toList(),
+                    onChanged: (SimulationScenario? newValue) {
+                      if (newValue != null) {
+                        HapticFeedback.lightImpact();
+                        context.read<CognitiveEngineProvider>().updateScenario(
+                          newValue,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatScenarioName(String text) {
+    RegExp exp = RegExp(r'(?<=[a-z])[A-Z]');
+    String formatted = text.replaceAllMapped(exp, (m) => ' ${m.group(0)}');
+    return formatted[0].toUpperCase() + formatted.substring(1);
   }
 }

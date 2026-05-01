@@ -7,6 +7,7 @@ import '../../providers/clock_provider.dart';
 import '../../providers/safte_provider.dart';
 import '../../providers/cognitive_engine_provider.dart';
 import '../../utils/dashboard_helpers.dart';
+
 import '../profile_page.dart';
 import '../focus_mode_page.dart';
 
@@ -56,21 +57,17 @@ class HomeTab extends StatelessWidget {
   }
 }
 
-/// Renders the main circular readiness score. Animates smoothly on full integer drops.
 class _ReadinessCard extends StatelessWidget {
   const _ReadinessCard();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // Live synchronization with the simulated clock
     final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
 
     final double rawScore = safte.getStateAt(clock.currentTime).effectiveness;
-    final double score = rawScore.floorToDouble(); // Prevents Tween jittering
-
+    final double score = rawScore.floorToDouble();
     final dynamicColor = SafteSemanticInterpreter.getEffectivenessColor(
       score,
       theme.colorScheme,
@@ -99,9 +96,8 @@ class _ReadinessCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'COGNITIVE READINESS',
+                // Uses labelMedium from theme (already bold and letterSpaced)
                 style: theme.textTheme.labelMedium?.copyWith(
-                  letterSpacing: 2.5,
-                  fontWeight: FontWeight.bold,
                   color: dynamicColor,
                 ),
               ),
@@ -177,7 +173,6 @@ class _ReadinessCard extends StatelessWidget {
   }
 }
 
-/// Renders the individual SAFTE components driven by live global time.
 class _KeyFactorsSection extends StatelessWidget {
   const _KeyFactorsSection();
 
@@ -198,10 +193,8 @@ class _KeyFactorsSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
           child: Text(
             'SAFTE COMPONENTS',
-            style: theme.textTheme.labelSmall?.copyWith(
-              letterSpacing: 1.5,
+            style: theme.textTheme.labelMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
             ),
           ),
         ),
@@ -244,7 +237,6 @@ class _KeyFactorsSection extends StatelessWidget {
   }
 }
 
-/// Reusable UI tile for biological contributors.
 class _ContributorTile extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -263,6 +255,7 @@ class _ContributorTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -325,7 +318,6 @@ class _ContributorTile extends StatelessWidget {
   }
 }
 
-/// Initiates the actual Focus Mode session. Disabled if readiness is too low.
 class _FloatingStartButton extends StatelessWidget {
   const _FloatingStartButton();
 
@@ -362,16 +354,13 @@ class _FloatingStartButton extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
         child: FilledButton(
           style: FilledButton.styleFrom(
+            // Inherits padding and shape from AppTheme. We only override colors based on state.
             backgroundColor: isEngineReady
                 ? theme.colorScheme.primary
                 : theme.colorScheme.surfaceContainerHighest,
             foregroundColor: isEngineReady
                 ? theme.colorScheme.onPrimary
                 : theme.colorScheme.onSurfaceVariant,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
             elevation: isEngineReady ? 8 : 0,
             shadowColor: theme.colorScheme.primary.withAlpha(100),
           ),
@@ -389,13 +378,7 @@ class _FloatingStartButton extends StatelessWidget {
             children: [
               Icon(Icons.power_settings_new_rounded),
               SizedBox(width: 12),
-              Text(
-                'START SESSION',
-                style: TextStyle(
-                  letterSpacing: 2.0,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text('START SESSION'), // Style inherited from AppTheme
             ],
           ),
         ),
