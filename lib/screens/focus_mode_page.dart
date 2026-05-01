@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../widgets/biometric_ring.dart';
+import '../utils/biometric_ring.dart';
 import '../providers/cognitive_engine_provider.dart';
 import 'session_report.dart';
 import 'break_mode_page.dart';

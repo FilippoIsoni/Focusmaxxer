@@ -2,11 +2,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import 'login_page.dart';
-import 'home_dashboard.dart';
-import '../providers/cognitive_engine_provider.dart';
 
+import '../providers/auth_provider.dart';
+import '../providers/analytics_provider.dart';
+import '../utils/dashboard_helpers.dart'; // <--- FIX: Corretta importazione del Router
+import '../utils/settings_components.dart';
+import 'login_page.dart';
+
+/// Manages the user's local identity and system connections.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -37,27 +40,23 @@ class _ProfilePageState extends State<ProfilePage> {
     _initialSurname = auth.surname;
     _initialNickname = auth.nickname;
 
-    _nameController = TextEditingController(text: _initialName);
-    _surnameController = TextEditingController(text: _initialSurname);
-    _nicknameController = TextEditingController(text: _initialNickname);
-
-    _nameController.addListener(_checkForChanges);
-    _surnameController.addListener(_checkForChanges);
-    _nicknameController.addListener(_checkForChanges);
+    _nameController = TextEditingController(text: _initialName)
+      ..addListener(_checkForChanges);
+    _surnameController = TextEditingController(text: _initialSurname)
+      ..addListener(_checkForChanges);
+    _nicknameController = TextEditingController(text: _initialNickname)
+      ..addListener(_checkForChanges);
   }
 
   @override
   void dispose() {
-    _nameController.removeListener(_checkForChanges);
-    _surnameController.removeListener(_checkForChanges);
-    _nicknameController.removeListener(_checkForChanges);
-
     _nameController.dispose();
     _surnameController.dispose();
     _nicknameController.dispose();
     super.dispose();
   }
 
+  /// Triggers a state update if current text field values deviate from initial values.
   void _checkForChanges() {
     final bool hasChanges =
         _nameController.text.trim() != _initialName ||
@@ -70,9 +69,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ==========================================
-  // CORE ACTIONS
+  // CORE DOMAIN ACTIONS
   // ==========================================
 
+  /// Persists local user identity changes.
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() ||
         _isProcessing ||
@@ -108,11 +108,14 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// Irreversibly deletes local personal data.
   Future<void> _clearPersonalData() async {
     if (_isProcessing) return;
-
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
+
+    // Cache the provider before the async gap to prevent mounted context crashes
+    final authProvider = context.read<AuthProvider>();
 
     final bool? confirm = await _showWarningDialog(
       title: 'Purge Identity Data?',
@@ -120,12 +123,12 @@ class _ProfilePageState extends State<ProfilePage> {
           'This will irreversibly erase your local personal information. Proceed?',
       confirmText: 'PURGE DATA',
     );
-    if (confirm != true || !mounted) return;
 
+    if (confirm != true || !mounted) return;
     setState(() => _isProcessing = true);
 
     try {
-      await context.read<AuthProvider>().clearProfileData();
+      await authProvider.clearProfileData();
 
       _initialName = '';
       _initialSurname = '';
@@ -144,27 +147,31 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // FIX: Rimosso il parametro BuildContext. Usa il context implicito dello State.
+  /// Safely flushes telemetry to disk and terminates the active user session.
   Future<void> _handleLogout() async {
     if (_isProcessing) return;
-
     FocusScope.of(context).unfocus();
     HapticFeedback.heavyImpact();
+
+    // Cache providers before the async gap
+    final analyticsProvider = context.read<AnalyticsProvider>();
+    final authProvider = context.read<AuthProvider>();
 
     final bool? confirm = await _showWarningDialog(
       title: 'Disconnect Session?',
       content: 'You will be logged out of the Impact framework.',
       confirmText: 'DISCONNECT',
     );
-    if (confirm != true || !mounted) return;
 
+    if (confirm != true || !mounted) return;
     setState(() => _isProcessing = true);
 
     try {
-      // 1. SPEGNI IL MOTORE: Ferma i timer e pulisci la RAM della sessione
-      context.read<CognitiveEngineProvider>().resetEngine();
-      await context.read<AuthProvider>().logout();
+      await analyticsProvider.saveWorkloadToDisk();
+      await authProvider.logout();
+
       if (!mounted) return;
+
       Navigator.of(context).pushAndRemoveUntil(
         PremiumPageRoute(page: const LoginPage()),
         (route) => false,
@@ -176,7 +183,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ==========================================
-  // UI HELPERS
+  // UI FEEDBACK HELPERS
   // ==========================================
 
   void _showCustomSnackBar(String message, {required bool isError}) {
@@ -268,138 +275,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   // ==========================================
-  // SETTINGS PANEL BUILDERS (Premium UI)
+  // VIEW RENDERER
   // ==========================================
-
-  Widget _buildSettingsGroup({required List<Widget> children}) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withAlpha(50),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withAlpha(15), width: 1.0),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Column(children: children),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextFieldRow({
-    required String label,
-    required IconData icon,
-    required TextEditingController controller,
-    required TextInputAction action,
-    bool isLast = false,
-    Function(String)? onSubmitted,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Row(
-            children: [
-              Icon(icon, color: colorScheme.primary, size: 22),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextFormField(
-                  controller: controller,
-                  textInputAction: action,
-                  onFieldSubmitted: onSubmitted,
-                  enabled: !_isProcessing,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
-                  ),
-                  cursorColor: colorScheme.primary,
-                  decoration: InputDecoration(
-                    labelText: label,
-                    labelStyle: TextStyle(
-                      color: colorScheme.onSurfaceVariant.withAlpha(150),
-                      fontSize: 13,
-                    ),
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: InputBorder.none, // Nessun bordo pacchiano!
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (!isLast)
-          Divider(
-            height: 1,
-            indent: 56,
-            endIndent: 20,
-            color: Colors.white.withAlpha(10),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildActionRow({
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-    bool isLast = false,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return InkWell(
-      onTap: _isProcessing ? null : onTap,
-      highlightColor: colorScheme.error.withAlpha(20),
-      splashColor: colorScheme.error.withAlpha(30),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            child: Row(
-              children: [
-                Icon(icon, color: colorScheme.error.withAlpha(220), size: 22),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.error.withAlpha(220),
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: colorScheme.error.withAlpha(100),
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
-          if (!isLast)
-            Divider(
-              height: 1,
-              indent: 56,
-              endIndent: 20,
-              color: colorScheme.error.withAlpha(20),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // MAIN BUILD
-  // ==========================================
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -421,11 +298,10 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Scaffold(
         backgroundColor: colorScheme.surface,
         body: GestureDetector(
-          onTap: () => FocusScope.of(context).unfocus(), // Rilascia il cursore
+          onTap: () => FocusScope.of(context).unfocus(),
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
-              // --- AMBIENT BACKGROUND GLOW ---
               Positioned(
                 top: -150,
                 left: -50,
@@ -444,11 +320,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
               ),
-
               CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
-                  // --- SMART SLIVER APP BAR ---
                   SliverAppBar(
                     pinned: true,
                     stretch: true,
@@ -484,13 +358,10 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                     ),
                   ),
-
-                  // --- CONTENT ---
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 64.0),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        // --- AVATAR ---
                         Center(
                           child: Stack(
                             alignment: Alignment.bottomRight,
@@ -534,10 +405,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 48),
-
-                        // --- SECTION: IDENTITY ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
@@ -551,35 +419,35 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         Form(
                           key: _formKey,
-                          child: _buildSettingsGroup(
+                          child: SettingsGroup(
                             children: [
-                              _buildTextFieldRow(
+                              SettingsTextField(
                                 label: 'Nickname',
                                 icon: Icons.alternate_email_rounded,
                                 controller: _nicknameController,
                                 action: TextInputAction.next,
+                                isEnabled: !_isProcessing,
                               ),
-                              _buildTextFieldRow(
+                              SettingsTextField(
                                 label: 'First Name',
                                 icon: Icons.person_outline_rounded,
                                 controller: _nameController,
                                 action: TextInputAction.next,
+                                isEnabled: !_isProcessing,
                               ),
-                              _buildTextFieldRow(
+                              SettingsTextField(
                                 label: 'Last Name',
                                 icon: Icons.fingerprint_rounded,
                                 controller: _surnameController,
                                 action: TextInputAction.done,
+                                isEnabled: !_isProcessing,
                                 isLast: true,
                                 onSubmitted: (_) => _saveProfile(),
                               ),
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 24),
-
-                        // --- SMART SAVE BUTTON ---
                         AnimatedOpacity(
                           duration: const Duration(milliseconds: 300),
                           opacity: _hasUnsavedChanges ? 1.0 : 0.4,
@@ -614,10 +482,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 48),
-
-                        // --- SECTION: DANGER ZONE ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
@@ -629,17 +494,17 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ),
-                        _buildSettingsGroup(
+                        SettingsGroup(
                           children: [
-                            _buildActionRow(
+                            SettingsActionRow(
                               label: 'Purge Identity Data',
                               icon: Icons.delete_forever_rounded,
-                              onTap: _clearPersonalData,
+                              onTap: _isProcessing ? null : _clearPersonalData,
                             ),
-                            _buildActionRow(
+                            SettingsActionRow(
                               label: 'Disconnect Server',
                               icon: Icons.logout_rounded,
-                              onTap: _handleLogout,
+                              onTap: _isProcessing ? null : _handleLogout,
                               isLast: true,
                             ),
                           ],
