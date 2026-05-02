@@ -268,6 +268,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   void updateScenario(SimulationScenario newScenario) {
     _scenarioSimulator = ScenarioSimulator(newScenario);
+    notifyListeners();
   }
 
   // ==========================================

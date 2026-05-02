@@ -93,15 +93,15 @@ class PremiumPageRoute extends PageRouteBuilder {
 class PremiumSliverAppBar extends StatelessWidget {
   final String title;
   final String? subtitle;
-  final IconData actionIcon;
-  final VoidCallback onActionTap;
+  final IconData? actionIcon;
+  final VoidCallback? onActionTap;
 
   const PremiumSliverAppBar({
     super.key,
     required this.title,
     this.subtitle,
-    required this.actionIcon,
-    required this.onActionTap,
+    this.actionIcon,
+    this.onActionTap,
   });
 
   @override

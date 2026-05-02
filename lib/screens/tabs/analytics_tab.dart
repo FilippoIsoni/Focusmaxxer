@@ -24,8 +24,6 @@ class AnalyticsTab extends StatelessWidget {
           slivers: [
             PremiumSliverAppBar(
               title: 'Analytics',
-              actionIcon: Icons.filter_list_rounded,
-              onActionTap: () {},
             ),
 
             // --- SESSION LIST ---
