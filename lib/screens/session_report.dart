@@ -130,7 +130,9 @@ class SessionReportPage extends StatelessWidget {
                                 _buildStatItem(
                                   context,
                                   'DURATION',
-                                  _formatDuration(duration),
+                                  _formatDuration(hrTimeline.isNotEmpty
+                                      ? Duration(seconds: hrTimeline.length * 5)
+                                      : duration),
                                 ),
                                 _buildStatItem(
                                   context,
@@ -307,13 +309,11 @@ class SessionReportPage extends StatelessWidget {
                   touchTooltipData: LineTouchTooltipData(
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
-                        final int totalSeconds =
-                            spot.x.toInt() *
-                            60; // Ripristinato il calcolo corretto in base ai minuti
-                        final int minutes = totalSeconds ~/ 60;
-                        final int seconds = totalSeconds % 60;
-                        final String timeStr =
-                            '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+                        final int totalSeconds = (spot.x * 60).round();
+                        final int totalMinutes = totalSeconds ~/ 60;
+                        final String timeStr = totalMinutes >= 60
+                            ? '${totalMinutes ~/ 60}h ${totalMinutes % 60}m'
+                            : '$totalMinutes min';
 
                         return LineTooltipItem(
                           '$timeStr\n',
