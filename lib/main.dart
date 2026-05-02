@@ -13,6 +13,9 @@ import 'providers/clock_provider.dart';
 import 'providers/safte_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
 
+// --- DATABASE ---
+import 'database/app_database.dart';
+
 // --- UTILS & SCREENS ---
 import 'utils/app_theme.dart';
 import 'screens/bootloader_screen.dart';
@@ -27,13 +30,17 @@ void main() async {
   // Load disk storage globally ONCE to prevent async gaps
   final prefs = await SharedPreferences.getInstance();
 
-  runApp(FocusMaxxerApp(prefs: prefs));
+  // Initialize Floor database
+  final database = await $FloorAppDatabase.databaseBuilder('app_database_v2.db').build();
+
+  runApp(FocusMaxxerApp(prefs: prefs, database: database));
 }
 
 class FocusMaxxerApp extends StatelessWidget {
   final SharedPreferences prefs;
+  final AppDatabase database;
 
-  const FocusMaxxerApp({super.key, required this.prefs});
+  const FocusMaxxerApp({super.key, required this.prefs, required this.database});
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +52,7 @@ class FocusMaxxerApp extends StatelessWidget {
 
         // 2. Base State Providers
         ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
-        ChangeNotifierProvider(create: (_) => AnalyticsProvider(prefs)),
+        ChangeNotifierProvider(create: (_) => AnalyticsProvider(prefs, database.sessionDao)),
         ChangeNotifierProvider(create: (_) => SafteProvider(prefs)),
         ChangeNotifierProvider(
           create: (_) =>

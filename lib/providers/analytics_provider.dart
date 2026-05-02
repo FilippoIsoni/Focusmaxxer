@@ -1,24 +1,39 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/session_data.dart';
+import '../database/session_dao.dart';
 
 /// Manages the persistence of user workload and historical sessions.
 /// It operates strictly as a vault, accepting data only when explicitly commanded.
-class AnalyticsProvider extends ChangeNotifier {
+class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final SharedPreferences prefs;
 
   // --- LIVE STATE ---
   int _dailyWorkedSeconds = 0;
   int get dailyWorkedSeconds => _dailyWorkedSeconds;
 
-  // --- HISTORY ---
+  // --- STORICO SESSIONI ---
+  final SessionDao _sessionDao;
   List<CognitiveSession> _sessions = [];
   List<CognitiveSession> get sessions => List.unmodifiable(_sessions);
 
-  AnalyticsProvider(this.prefs) {
+  AnalyticsProvider(this.prefs, this._sessionDao) {
+    WidgetsBinding.instance.addObserver(this);
     _dailyWorkedSeconds = prefs.getInt('worked_seconds') ?? 0;
-    _loadSessionsHistory();
+    _loadSessions();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      saveWorkloadToDisk();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   // ==========================================
@@ -26,13 +41,29 @@ class AnalyticsProvider extends ChangeNotifier {
   // ==========================================
 
   /// Applies a fully validated session to the daily limits and historical ledger.
-  void commitValidatedSession(CognitiveSession session) {
+  Future<void> commitValidatedSession(CognitiveSession session) async {
     _dailyWorkedSeconds += session.durationSeconds;
-    _sessions.insert(0, session);
 
-    // Save to disk immediately upon commit
+    // Salva nel database Floor e recupera l'id generato
+    final insertedId = await _sessionDao.insertSession(session);
+    final insertedSession = CognitiveSession(
+      id: insertedId,
+      date: session.date,
+      durationSeconds: session.durationSeconds,
+      perceivedExertion: session.perceivedExertion,
+      endingEffectiveness: session.endingEffectiveness,
+      hrTimelineJson: session.hrTimelineJson,
+    );
+    _sessions.insert(0, insertedSession);
+
     saveWorkloadToDisk();
-    _saveSessionsHistory();
+    notifyListeners();
+  }
+
+  /// Elimina una sessione dal database e dalla lista locale
+  Future<void> deleteSession(CognitiveSession session) async {
+    await _sessionDao.deleteSession(session);
+    _sessions.removeWhere((s) => s.id == session.id);
     notifyListeners();
   }
 
@@ -47,25 +78,14 @@ class AnalyticsProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // HISTORY PERSISTENCE
+  // HISTORY PERSISTENCE (Floor DB)
   // ==========================================
 
   int get totalFocusSeconds =>
       _sessions.fold(0, (sum, s) => sum + s.durationSeconds);
 
-  Future<void> _saveSessionsHistory() async {
-    final List<String> jsonList = _sessions
-        .map((s) => jsonEncode(s.toJson()))
-        .toList();
-    await prefs.setStringList('sessions_history', jsonList);
-  }
-
-  void _loadSessionsHistory() {
-    final List<String>? jsonList = prefs.getStringList('sessions_history');
-    if (jsonList != null) {
-      _sessions = jsonList
-          .map((jsonStr) => CognitiveSession.fromJson(jsonDecode(jsonStr)))
-          .toList();
-    }
+  Future<void> _loadSessions() async {
+    _sessions = await _sessionDao.findAllSessions();
+    notifyListeners();
   }
 }

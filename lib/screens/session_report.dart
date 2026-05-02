@@ -7,8 +7,15 @@ import '../providers/cognitive_engine_provider.dart';
 
 class SessionReportPage extends StatelessWidget {
   final Duration duration;
+  final bool isHistory;
+  final List<Map<String, dynamic>>? historicalTimeline;
 
-  const SessionReportPage({super.key, required this.duration});
+  const SessionReportPage({
+    super.key,
+    required this.duration,
+    this.isHistory = false,
+    this.historicalTimeline,
+  });
 
   void _finishSession(BuildContext context) {
     // La sessione è GIÀ stata salvata in modo sicuro dal CognitiveEngineProvider
@@ -32,8 +39,10 @@ class SessionReportPage extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Estraiamo la timeline dall'engine (il buffer è ancora vivo qui)
-    final hrTimeline = context.read<CognitiveEngineProvider>().hrTimeline;
+    // Se siamo in modalità storico, usa la timeline passata; altrimenti leggi dall'engine
+    final hrTimeline = isHistory
+        ? (historicalTimeline ?? [])
+        : context.read<CognitiveEngineProvider>().hrTimeline;
 
     // Calcoliamo TUTTE le statistiche qui
     int avgHr = 0;
@@ -61,8 +70,8 @@ class SessionReportPage extends StatelessWidget {
     }
 
     return PopScope(
-      // Blocca il back button fisico su Android
-      canPop: false,
+      // In storico, permetti il back; in sessione live, blocca
+      canPop: isHistory,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: SafeArea(
@@ -184,14 +193,16 @@ class SessionReportPage extends StatelessWidget {
                       ),
                       const Spacer(), // spinge il bottone in fondo
                       FilledButton(
-                        onPressed: () => _finishSession(context),
+                        onPressed: isHistory
+                            ? () => Navigator.of(context).pop()
+                            : () => _finishSession(context),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 20),
                           backgroundColor: colorScheme.primary,
                         ),
-                        child: const Text(
-                          'SAVE & CLOSE',
-                          style: TextStyle(
+                        child: Text(
+                          isHistory ? 'CLOSE' : 'SAVE & CLOSE',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.5,
                           ),

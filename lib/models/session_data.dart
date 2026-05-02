@@ -1,32 +1,46 @@
+import 'dart:convert';
+import 'package:floor/floor.dart';
 import '../providers/cognitive_engine_provider.dart' show EngineState;
 
 /// Immutable object representing a completed and consolidated session.
+@entity
 class CognitiveSession {
-  final DateTime date;
+  @PrimaryKey(autoGenerate: true)
+  final int? id;
+
+  final String date; // ISO 8601 string
   final int durationSeconds;
   final int perceivedExertion; // RPE (1-5)
   final double endingEffectiveness; // Final SAFTE score
+  final String hrTimelineJson; // JSON-serialized HR timeline array
 
   CognitiveSession({
+    this.id,
     required this.date,
     required this.durationSeconds,
     required this.perceivedExertion,
     required this.endingEffectiveness,
+    required this.hrTimelineJson,
   });
 
+  // Serializzazione per uso generico
   Map<String, dynamic> toJson() => {
-    'date': date.toIso8601String(),
+    'id': id,
+    'date': date,
     'durationSeconds': durationSeconds,
     'perceivedExertion': perceivedExertion,
     'endingEffectiveness': endingEffectiveness,
+    'hrTimelineJson': hrTimelineJson,
   };
 
   factory CognitiveSession.fromJson(Map<String, dynamic> json) {
     return CognitiveSession(
-      date: DateTime.parse(json['date']),
+      id: json['id'] as int?,
+      date: json['date'] as String,
       durationSeconds: json['durationSeconds'] as int,
       perceivedExertion: json['perceivedExertion'] as int,
       endingEffectiveness: (json['endingEffectiveness'] as num).toDouble(),
+      hrTimelineJson: json['hrTimelineJson'] as String? ?? '[]',
     );
   }
 }
@@ -68,11 +82,12 @@ class ActiveSessionBuffer {
   /// Converts the volatile buffer into an immutable completed session record.
   CognitiveSession toCompletedSession(double finalEffectiveness) {
     return CognitiveSession(
-      date: startTime,
+      date: startTime.toIso8601String(),
       durationSeconds: totalFocusSeconds,
       perceivedExertion:
           3, // Defaults to 3 unless overridden by a post-session UI prompt
       endingEffectiveness: finalEffectiveness,
+      hrTimelineJson: jsonEncode(hrTimeline),
     );
   }
 }
