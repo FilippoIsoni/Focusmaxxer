@@ -152,17 +152,18 @@ class PremiumSliverAppBar extends StatelessWidget {
         ),
       ),
       actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(20),
-            shape: BoxShape.circle,
+        if (actionIcon != null)
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(20),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(actionIcon, size: 20, color: Colors.white),
+              onPressed: onActionTap,
+            ),
           ),
-          child: IconButton(
-            icon: Icon(actionIcon, size: 20, color: Colors.white),
-            onPressed: onActionTap,
-          ),
-        ),
       ],
     );
   }
