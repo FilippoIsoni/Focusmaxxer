@@ -93,15 +93,15 @@ class PremiumPageRoute extends PageRouteBuilder {
 class PremiumSliverAppBar extends StatelessWidget {
   final String title;
   final String? subtitle;
-  final IconData actionIcon;
-  final VoidCallback onActionTap;
+  final IconData? actionIcon;
+  final VoidCallback? onActionTap;
 
   const PremiumSliverAppBar({
     super.key,
     required this.title,
     this.subtitle,
-    required this.actionIcon,
-    required this.onActionTap,
+    this.actionIcon,
+    this.onActionTap,
   });
 
   @override
@@ -152,17 +152,18 @@ class PremiumSliverAppBar extends StatelessWidget {
         ),
       ),
       actions: [
-        Container(
-          margin: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(20),
-            shape: BoxShape.circle,
+        if (actionIcon != null && onActionTap != null)
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(20),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(actionIcon, size: 20, color: Colors.white),
+              onPressed: onActionTap,
+            ),
           ),
-          child: IconButton(
-            icon: Icon(actionIcon, size: 20, color: Colors.white),
-            onPressed: onActionTap,
-          ),
-        ),
       ],
     );
   }

@@ -262,6 +262,8 @@ class SessionReportPage extends StatelessWidget {
                 gridData: const FlGridData(show: true),
                 titlesData: const FlTitlesData(show: false),
                 borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: spots.isEmpty ? 1 : spots.last.x,
                 minY: 40,
                 maxY: 160,
                 rangeAnnotations: RangeAnnotations(
@@ -282,8 +284,8 @@ class SessionReportPage extends StatelessWidget {
                     getTooltipItems: (touchedSpots) {
                                         return touchedSpots.map((spot) {
                                 // 1. Estraiamo il tempo dall'asse X
-                                // (Assumendo che ogni punto sull'asse X sia 1 secondo)
-                                        final int totalSeconds = spot.x.toInt();
+                                // spot.x è in minuti, quindi moltiplichiamo per 60
+                                        final int totalSeconds = (spot.x * 60).round();
                                         final int minutes = totalSeconds ~/ 60;
                                         final int seconds = totalSeconds % 60;
 
