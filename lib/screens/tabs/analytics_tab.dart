@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/analytics_provider.dart';
 import '../../utils/dashboard_helpers.dart';
+import '../session_report.dart';
 
 /// Analytics view rendering the user's daily workload and session history.
 class AnalyticsTab extends StatelessWidget {
@@ -17,9 +19,6 @@ class AnalyticsTab extends StatelessWidget {
     return Consumer<AnalyticsProvider>(
       builder: (context, analytics, child) {
         final sessions = analytics.sessions;
-        final totalTime = SafteSemanticInterpreter.formatTotalTime(
-          analytics.totalFocusSeconds,
-        );
 
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
@@ -28,49 +27,6 @@ class AnalyticsTab extends StatelessWidget {
               title: 'Analytics',
               actionIcon: Icons.filter_list_rounded,
               onActionTap: () => HapticFeedback.lightImpact(),
-            ),
-
-            // --- HEADER: DAILY STATS ---
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        colorScheme.primary.withAlpha(50),
-                        colorScheme.primary.withAlpha(10),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: colorScheme.primary.withAlpha(50),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'TOTAL DEEP WORK TODAY',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        totalTime,
-                        style: theme.textTheme.displaySmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ),
 
             // --- SESSION LIST ---
@@ -105,8 +61,29 @@ class AnalyticsTab extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final session = sessions[index];
                     final durationMins = session.durationSeconds ~/ 60;
+                    final sessionDate = DateTime.parse(session.date);
+                    final dateStr = "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year} - ${sessionDate.hour.toString().padLeft(2, '0')}:${sessionDate.minute.toString().padLeft(2, '0')}";
 
-                    return Container(
+                    return InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (context) {
+                                final timelineList = jsonDecode(session.hrTimelineJson) as List<dynamic>;
+                                final decodedTimeline = timelineList.map((e) => e as Map<String, dynamic>).toList();
+                                
+                                return SessionReportPage(
+                                  duration: Duration(seconds: session.durationSeconds),
+                                  isHistory: true,
+                                  historicalTimeline: decodedTimeline,
+                                );
+                              },
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -135,7 +112,7 @@ class AnalyticsTab extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "Deep Work Segment",
+                                  dateStr,
                                   style: theme.textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
@@ -158,9 +135,14 @@ class AnalyticsTab extends StatelessWidget {
                               color: colorScheme.primary,
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.white54),
+                            onPressed: () => analytics.deleteSession(session),
+                          ),
                         ],
                       ),
-                    );
+                    ));
                   }, childCount: sessions.length),
                 ),
               ),

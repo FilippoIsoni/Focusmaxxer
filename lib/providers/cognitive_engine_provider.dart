@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -164,10 +166,11 @@ class CognitiveEngineProvider extends ChangeNotifier
         if (_sessionTotalFocusSeconds >= 60) {
           analytics.addSession(
             CognitiveSession(
-              date: DateTime.now(),
+              date: DateTime.now().toIso8601String(),
               durationSeconds: _sessionTotalFocusSeconds,
               perceivedExertion: 3,
               endingEffectiveness: currentEffectiveness,
+              hrTimelineJson: jsonEncode(hrTimeline),
             ),
           );
         }

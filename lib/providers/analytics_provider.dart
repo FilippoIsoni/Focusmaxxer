@@ -1,7 +1,8 @@
-import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/session_data.dart';
+import '../database/session_dao.dart';
 
 class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final SharedPreferences prefs;
@@ -11,10 +12,11 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get dailyWorkedSeconds => _dailyWorkedSeconds;
 
   // --- STORICO SESSIONI ---
+  final SessionDao _sessionDao;
   List<CognitiveSession> _sessions = [];
   List<CognitiveSession> get sessions => List.unmodifiable(_sessions);
 
-  AnalyticsProvider(this.prefs) {
+  AnalyticsProvider(this.prefs, this._sessionDao) {
     WidgetsBinding.instance.addObserver(this);
     _dailyWorkedSeconds = prefs.getInt('worked_seconds') ?? 0;
     _loadSessionsHistory();
@@ -72,25 +74,28 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   int get totalFocusSeconds =>
       _sessions.fold(0, (sum, s) => sum + s.durationSeconds);
 
-  void addSession(CognitiveSession session) {
-    _sessions.insert(0, session);
-    _saveSessionsHistory();
+  Future<void> addSession(CognitiveSession session) async {
+    final id = await _sessionDao.insertSession(session);
+    final insertedSession = CognitiveSession(
+      id: id,
+      date: session.date,
+      durationSeconds: session.durationSeconds,
+      perceivedExertion: session.perceivedExertion,
+      endingEffectiveness: session.endingEffectiveness,
+      hrTimelineJson: session.hrTimelineJson,
+    );
+    _sessions.insert(0, insertedSession);
     notifyListeners();
   }
 
-  Future<void> _saveSessionsHistory() async {
-    final List<String> jsonList = _sessions
-        .map((s) => jsonEncode(s.toJson()))
-        .toList();
-    await prefs.setStringList('sessions_history', jsonList);
+  Future<void> deleteSession(CognitiveSession session) async {
+    await _sessionDao.deleteSession(session);
+    _sessions.removeWhere((s) => s.id == session.id);
+    notifyListeners();
   }
 
-  void _loadSessionsHistory() {
-    final List<String>? jsonList = prefs.getStringList('sessions_history');
-    if (jsonList != null) {
-      _sessions = jsonList
-          .map((jsonStr) => CognitiveSession.fromJson(jsonDecode(jsonStr)))
-          .toList();
-    }
+  Future<void> _loadSessionsHistory() async {
+    _sessions = await _sessionDao.findAllSessions();
+    notifyListeners();
   }
 }

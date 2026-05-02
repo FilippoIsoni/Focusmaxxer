@@ -16,6 +16,8 @@ import 'providers/cognitive_engine_provider.dart';
 import 'utils/app_theme.dart';
 import 'screens/bootloader_screen.dart';
 
+import 'database/app_database.dart';
+
 /// App Entry Point: Initializes hardware bindings and core memory.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,14 +27,16 @@ void main() async {
 
   // Load disk storage globally ONCE to prevent async gaps
   final prefs = await SharedPreferences.getInstance();
+  final database = await $FloorAppDatabase.databaseBuilder('app_database_v2.db').build();
 
-  runApp(FocusMaxxerApp(prefs: prefs));
+  runApp(FocusMaxxerApp(prefs: prefs, database: database));
 }
 
 class FocusMaxxerApp extends StatelessWidget {
   final SharedPreferences prefs;
+  final AppDatabase database;
 
-  const FocusMaxxerApp({super.key, required this.prefs});
+  const FocusMaxxerApp({super.key, required this.prefs, required this.database});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +47,7 @@ class FocusMaxxerApp extends StatelessWidget {
 
         // 2. Base State Providers
         ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
-        ChangeNotifierProvider(create: (_) => AnalyticsProvider(prefs)),
+        ChangeNotifierProvider(create: (_) => AnalyticsProvider(prefs, database.sessionDao)),
         ChangeNotifierProvider(create: (_) => SafteProvider(prefs)),
         ChangeNotifierProvider(
           create: (_) =>

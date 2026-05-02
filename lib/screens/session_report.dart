@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,8 +10,10 @@ import '../models/session_data.dart';
 
 class SessionReportPage extends StatelessWidget {
   final Duration duration;
+  final bool isHistory;
+  final List<Map<String, dynamic>>? historicalTimeline;
 
-  const SessionReportPage({super.key, required this.duration});
+  const SessionReportPage({super.key, required this.duration, this.isHistory = false, this.historicalTimeline});
 
   void _finishSession(BuildContext context) {
     final engine = context.read<CognitiveEngineProvider>();
@@ -18,10 +21,11 @@ class SessionReportPage extends StatelessWidget {
 
     analytics.addSession(
       CognitiveSession(
-        date: DateTime.now(),
+        date: DateTime.now().toIso8601String(),
         durationSeconds: duration.inSeconds,
         perceivedExertion: 3,
         endingEffectiveness: engine.currentEffectiveness,
+        hrTimelineJson: jsonEncode(engine.hrTimeline),
       ),
     );
 
@@ -41,8 +45,8 @@ class SessionReportPage extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     
-    // Estraiamo la timeline dall'engine
-    final hrTimeline = context.read<CognitiveEngineProvider>().hrTimeline;
+    // Estraiamo la timeline dall'engine, oppure usiamo lo storico
+    final hrTimeline = isHistory ? (historicalTimeline ?? <Map<String, dynamic>>[]) : context.read<CognitiveEngineProvider>().hrTimeline;
     // Calcoliamo TUTTE le statistiche qui
     int avgHr = 0;
     int peakHr = 0;
@@ -71,7 +75,7 @@ class SessionReportPage extends StatelessWidget {
     }
 
     return PopScope(// Blocca il back button fisico su Android
-      canPop: false,
+      canPop: isHistory,
       child: Scaffold(
         backgroundColor: theme.scaffoldBackgroundColor,
         body: SafeArea(
@@ -169,14 +173,20 @@ class SessionReportPage extends StatelessWidget {
                       const Spacer(),// spinge il bottone in fondo
 
                       FilledButton(
-                        onPressed: () => _finishSession(context),
+                        onPressed: () {
+                          if (isHistory) {
+                            Navigator.of(context).pop();
+                          } else {
+                            _finishSession(context);
+                          }
+                        },
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 20),
                           backgroundColor: colorScheme.primary,
                         ),
-                        child: const Text(
-                          'SAVE & CLOSE',
-                          style: TextStyle(
+                        child: Text(
+                          isHistory ? 'CLOSE' : 'SAVE & CLOSE',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.5,
                           ),
