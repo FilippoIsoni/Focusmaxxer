@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/session_data.dart';
 import '../database/session_dao.dart';
 
@@ -44,8 +45,10 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> commitValidatedSession(CognitiveSession session) async {
     _dailyWorkedSeconds += session.durationSeconds;
 
-    // Salva nel database Floor e recupera l'id generato
+    // Save to Floor DB and retrieve the generated ID
     final insertedId = await _sessionDao.insertSession(session);
+
+    // Create the final object with the new ID and ALL properties
     final insertedSession = CognitiveSession(
       id: insertedId,
       date: session.date,
@@ -53,14 +56,15 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
       perceivedExertion: session.perceivedExertion,
       endingEffectiveness: session.endingEffectiveness,
       hrTimelineJson: session.hrTimelineJson,
+      terminationReason: session.terminationReason, // FIX: Mancava questo!
     );
-    _sessions.insert(0, insertedSession);
 
+    _sessions.insert(0, insertedSession);
     saveWorkloadToDisk();
     notifyListeners();
   }
 
-  /// Elimina una sessione dal database e dalla lista locale
+  /// Deletes a session from both DB and local state
   Future<void> deleteSession(CognitiveSession session) async {
     await _sessionDao.deleteSession(session);
     _sessions.removeWhere((s) => s.id == session.id);

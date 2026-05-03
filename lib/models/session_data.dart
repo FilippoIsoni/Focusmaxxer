@@ -7,12 +7,12 @@ import '../providers/cognitive_engine_provider.dart' show EngineState;
 class CognitiveSession {
   @PrimaryKey(autoGenerate: true)
   final int? id;
-
   final String date; // ISO 8601 string
   final int durationSeconds;
-  final int perceivedExertion; // RPE (1-5)
+  final int perceivedExertion; // RPE (1-5) - Kept for DB backward compatibility
   final double endingEffectiveness; // Final SAFTE score
   final String hrTimelineJson; // JSON-serialized HR timeline array
+  final String terminationReason; // Why the session ended
 
   CognitiveSession({
     this.id,
@@ -21,9 +21,9 @@ class CognitiveSession {
     required this.perceivedExertion,
     required this.endingEffectiveness,
     required this.hrTimelineJson,
+    required this.terminationReason,
   });
 
-  // Serializzazione per uso generico
   Map<String, dynamic> toJson() => {
     'id': id,
     'date': date,
@@ -31,6 +31,7 @@ class CognitiveSession {
     'perceivedExertion': perceivedExertion,
     'endingEffectiveness': endingEffectiveness,
     'hrTimelineJson': hrTimelineJson,
+    'terminationReason': terminationReason,
   };
 
   factory CognitiveSession.fromJson(Map<String, dynamic> json) {
@@ -41,12 +42,12 @@ class CognitiveSession {
       perceivedExertion: json['perceivedExertion'] as int,
       endingEffectiveness: (json['endingEffectiveness'] as num).toDouble(),
       hrTimelineJson: json['hrTimelineJson'] as String? ?? '[]',
+      terminationReason: json['terminationReason'] as String? ?? 'MANUAL END',
     );
   }
 }
 
 /// A volatile buffer that holds telemetry and counters while a session is running.
-/// It acts as a sandbox to prevent polluting persistent storage before validation.
 class ActiveSessionBuffer {
   final DateTime startTime;
   int totalFocusSeconds = 0;
@@ -55,11 +56,8 @@ class ActiveSessionBuffer {
 
   ActiveSessionBuffer({required this.startTime});
 
-  /// Business Rule: A session is only valid and worthy of persistence
-  /// if it survives the 10-minute (600s) baseline calibration window.
   bool get isValidated => totalFocusSeconds > 600;
 
-  /// Ingests a new tick of data, updating counters based on the current Engine state.
   void recordTick({
     required EngineState state,
     required double hr,
@@ -79,15 +77,17 @@ class ActiveSessionBuffer {
     });
   }
 
-  /// Converts the volatile buffer into an immutable completed session record.
-  CognitiveSession toCompletedSession(double finalEffectiveness) {
+  CognitiveSession toCompletedSession(
+    double finalEffectiveness,
+    String reason,
+  ) {
     return CognitiveSession(
       date: startTime.toIso8601String(),
       durationSeconds: totalFocusSeconds,
-      perceivedExertion:
-          3, // Defaults to 3 unless overridden by a post-session UI prompt
+      perceivedExertion: 3,
       endingEffectiveness: finalEffectiveness,
       hrTimelineJson: jsonEncode(hrTimeline),
+      terminationReason: reason,
     );
   }
 }

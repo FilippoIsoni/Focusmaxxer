@@ -55,6 +55,9 @@ class CognitiveEngineProvider extends ChangeNotifier
   static const int _breakExtensionSeconds = 300;
   static const int _maxBreakExtensions = 3;
 
+  String _terminationReason = 'MANUAL END';
+  String get terminationReason => _terminationReason;
+
   // ==========================================
   // INTERNAL STATE
   // ==========================================
@@ -425,6 +428,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     if (_activeBuffer != null && _activeBuffer!.isValidated) {
       final finalSession = _activeBuffer!.toCompletedSession(
         currentEffectiveness,
+        _terminationReason,
       );
       analytics.commitValidatedSession(finalSession);
     }
@@ -482,7 +486,8 @@ class CognitiveEngineProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void endSession() {
+  void endSession([String reason = 'MANUAL END']) {
+    _terminationReason = reason;
     _commitSessionIfValid();
     _currentState = EngineState.sessionEnded;
     _updateWakelock();
@@ -490,11 +495,11 @@ class CognitiveEngineProvider extends ChangeNotifier
   }
 
   void _triggerDailyLimit() {
+    _terminationReason = 'CLINICAL LIMIT REACHED';
     _commitSessionIfValid();
     _currentState = EngineState.dailyLimitReached;
     _updateWakelock();
     notifyListeners();
-
     Future.delayed(const Duration(seconds: 2), () {
       _currentState = EngineState.sessionEnded;
       notifyListeners();

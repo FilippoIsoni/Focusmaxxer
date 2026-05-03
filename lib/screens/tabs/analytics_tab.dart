@@ -22,9 +22,7 @@ class AnalyticsTab extends StatelessWidget {
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            PremiumSliverAppBar(
-              title: 'Analytics',
-            ),
+            PremiumSliverAppBar(title: 'Analytics'),
 
             // --- SESSION LIST ---
             if (sessions.isEmpty)
@@ -74,16 +72,24 @@ class AnalyticsTab extends StatelessWidget {
                               List<Map<String, dynamic>> decodedTimeline = [];
                               try {
                                 final timelineList =
-                                    jsonDecode(session.hrTimelineJson) as List<dynamic>;
+                                    jsonDecode(session.hrTimelineJson)
+                                        as List<dynamic>;
                                 decodedTimeline = timelineList
-                                    .map((e) => Map<String, dynamic>.from(e as Map))
+                                    .map(
+                                      (e) =>
+                                          Map<String, dynamic>.from(e as Map),
+                                    )
                                     .toList();
                               } catch (_) {}
 
                               return SessionReportPage(
-                                duration: Duration(seconds: session.durationSeconds),
+                                duration: Duration(
+                                  seconds: session.durationSeconds,
+                                ),
                                 isHistory: true,
                                 historicalTimeline: decodedTimeline,
+                                terminationReason: session
+                                    .terminationReason, // <-- Aggiungi questo!
                               );
                             },
                           ),
@@ -94,7 +100,9 @@ class AnalyticsTab extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withAlpha(50),
+                          color: colorScheme.surfaceContainerHighest.withAlpha(
+                            50,
+                          ),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.white.withAlpha(15)),
                         ),

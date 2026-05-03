@@ -34,15 +34,22 @@ class _FocusModePageState extends State<FocusModePage> {
 
   void _onStateChange() {
     if (!mounted) return;
+
     if (_engineListener!.currentState == EngineState.sessionEnded) {
       _engineListener!.removeListener(_onStateChange);
+
       final fakeElapsed = Duration(
         seconds: _engineListener!.sessionTotalFocusSeconds,
       );
+      final reason =
+          _engineListener!.terminationReason; // FIX: Estrazione della ragione
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => SessionReportPage(duration: fakeElapsed),
+        PremiumPageRoute(
+          page: SessionReportPage(
+            duration: fakeElapsed,
+            terminationReason: reason, // FIX: Passaggio della ragione
+          ),
         ),
       );
     }
@@ -307,6 +314,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                           .abortCalibrationSession();
                                       Navigator.of(context).pop();
                                     } else {
+                                      // Implicitly calls endSession('MANUAL END') via default param
                                       context
                                           .read<CognitiveEngineProvider>()
                                           .endSession();
@@ -362,7 +370,6 @@ class _FocusModePageState extends State<FocusModePage> {
               ),
             ),
 
-            // Overlays
             if (engine.isCalibrationAnomaly)
               const _CalibrationAnomalyOverlay()
             else if (engine.isAfkWarningActive)
@@ -375,7 +382,7 @@ class _FocusModePageState extends State<FocusModePage> {
 }
 
 // ==========================================
-// PRIVATE SUB-WIDGETS FOR OVERLAYS
+// PRIVATE OVERLAYS & COMPONENTS
 // ==========================================
 
 class _CalibrationAnomalyOverlay extends StatelessWidget {
@@ -552,10 +559,6 @@ class _AfkWarningOverlay extends StatelessWidget {
     );
   }
 }
-
-// ==========================================
-// SESSION TIMER DISPLAY
-// ==========================================
 
 class _SessionTimerDisplay extends StatelessWidget {
   const _SessionTimerDisplay();

@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -43,13 +44,38 @@ class _BreakModePageState extends State<BreakModePage>
 
   void _checkAutoRoute() {
     if (_isNavigating || !mounted) return;
+
+    // 1. Check for Neural Fatigue Kick-out
     if (_engineRef.advisoryMessage.contains('Maximum break reached')) {
       _isNavigating = true;
       HapticFeedback.heavyImpact();
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
-      _engineRef.endSession();
+      _engineRef.endSession('NEURAL FATIGUE'); // FIX: Forza la motivazione
+
       Navigator.of(context).pushReplacement(
-        PremiumPageRoute(page: SessionReportPage(duration: duration)),
+        PremiumPageRoute(
+          page: SessionReportPage(
+            duration: duration,
+            terminationReason: 'NEURAL FATIGUE',
+          ),
+        ),
+      );
+      return;
+    }
+
+    // 2. Check for Global Session Ended (e.g., Daily Limit reached during break)
+    if (_engineRef.currentState == EngineState.sessionEnded) {
+      _isNavigating = true;
+      final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
+      final reason = _engineRef.terminationReason;
+
+      Navigator.of(context).pushReplacement(
+        PremiumPageRoute(
+          page: SessionReportPage(
+            duration: duration,
+            terminationReason: reason,
+          ),
+        ),
       );
     }
   }
@@ -324,13 +350,20 @@ class _BreakModePageState extends State<BreakModePage>
                               if (_isNavigating) return;
                               _isNavigating = true;
                               HapticFeedback.heavyImpact();
+
                               final duration = Duration(
                                 seconds: engine.sessionTotalFocusSeconds,
                               );
-                              engine.endSession();
+                              engine.endSession(
+                                'MANUAL END',
+                              ); // FIX: Forza la motivazione
+
                               Navigator.of(context).pushReplacement(
                                 PremiumPageRoute(
-                                  page: SessionReportPage(duration: duration),
+                                  page: SessionReportPage(
+                                    duration: duration,
+                                    terminationReason: 'MANUAL END',
+                                  ),
                                 ),
                               );
                             },
