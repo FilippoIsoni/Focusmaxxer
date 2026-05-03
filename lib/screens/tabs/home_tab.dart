@@ -16,10 +16,34 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
         return Stack(
           children: [
+            // DEEP DARK GLOW
+            Positioned(
+              top: -150,
+              right: -100,
+              child: Container(
+                width: 500,
+                height: 500,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withAlpha(
+                        15,
+                      ), // Ridotto per un dark mode profondo
+                      Colors.transparent,
+                    ],
+                    stops: const [0.2, 1.0],
+                  ),
+                ),
+              ),
+            ),
+
             CustomScrollView(
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
@@ -33,15 +57,16 @@ class HomeTab extends StatelessWidget {
                     HapticFeedback.lightImpact();
                     Navigator.of(
                       context,
-                    ).push(PremiumPageRoute(page: const ProfilePage()));
+                    ).push(FadeRoute(page: const ProfilePage()));
                   },
                 ),
                 SliverPadding(
-                  // Padding allungato per far spazio al nuovo modulo del traguardo giornaliero
-                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 180),
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 140),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const _ReadinessCard(),
+                      const SizedBox(height: 24),
+                      const _DailyWorkloadCard(), // NUOVA POSIZIONE DELLA BARRA
                       const SizedBox(height: 40),
                       const _KeyFactorsSection(),
                     ]),
@@ -49,10 +74,74 @@ class HomeTab extends StatelessWidget {
                 ),
               ],
             ),
-            const _FloatingStartButton(),
+            const _FloatingStartButton(), // TORNATO MINIMALE
           ],
         );
       },
+    );
+  }
+}
+
+class _DailyWorkloadCard extends StatelessWidget {
+  const _DailyWorkloadCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final analytics = context.watch<AnalyticsProvider>();
+    final engine = context.watch<CognitiveEngineProvider>();
+
+    final int workedMinutes = analytics.dailyWorkedSeconds ~/ 60;
+    const int maxMinutes = 240; // 4 ore
+    final double progress = (workedMinutes / maxMinutes).clamp(0.0, 1.0);
+    final bool isLimitReached = engine.isDailyLimitReached;
+
+    final Color barColor = isLimitReached
+        ? colorScheme.tertiary
+        : colorScheme.primary;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withAlpha(50),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withAlpha(10), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'DAILY DEEP WORK',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              Text(
+                '${workedMinutes}m / 4h',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: isLimitReached ? colorScheme.tertiary : Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: Colors.white.withAlpha(10),
+              color: barColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -219,7 +308,7 @@ class _KeyFactorsSection extends StatelessWidget {
           statusLabel: SafteSemanticInterpreter.getCircadianStatus(
             currentState.circadianValue,
           ),
-          statusColor: theme.colorScheme.tertiary, // Azzurro: Costante naturale
+          statusColor: theme.colorScheme.tertiary,
         ),
         const SizedBox(height: 12),
         _ContributorTile(
@@ -230,8 +319,6 @@ class _KeyFactorsSection extends StatelessWidget {
             safte.wakeupTime,
             clock.currentTime,
           ),
-          // Semantica applicata: L'inerzia del sonno è un "danno" passeggero, quindi Ambra.
-          // Se "Cleared", potrebbe diventare un grigio neutro o mantenere il tema.
           statusColor: theme.colorScheme.secondary,
         ),
       ],
@@ -328,7 +415,6 @@ class _FloatingStartButton extends StatelessWidget {
     final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
     final engine = context.watch<CognitiveEngineProvider>();
-    final analytics = context.watch<AnalyticsProvider>();
 
     final double currentScore = safte
         .getStateAt(clock.currentTime)
@@ -359,11 +445,6 @@ class _FloatingStartButton extends StatelessWidget {
       buttonIcon = Icons.power_settings_new_rounded;
     }
 
-    // Calcolo del progresso giornaliero
-    final int workedMinutes = analytics.dailyWorkedSeconds ~/ 60;
-    const int maxMinutes = 240; // 4 ore
-    final double progress = (workedMinutes / maxMinutes).clamp(0.0, 1.0);
-
     return Positioned(
       bottom: 0,
       left: 0,
@@ -378,126 +459,79 @@ class _FloatingStartButton extends StatelessWidget {
               theme.colorScheme.surface.withAlpha(240),
               theme.colorScheme.surface,
             ],
-            stops: const [0.0, 0.3, 1.0],
+            stops: const [0.0, 0.4, 1.0],
           ),
         ),
         padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // --- DAILY PROGRESS MODULE ---
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'DAILY DEEP WORK',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  Text(
-                    '${workedMinutes}m / 4h',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: isLimitReached
-                          ? theme.colorScheme.tertiary
-                          : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+        child: SizedBox(
+          width: double.infinity,
+          height: 64,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: buttonColor,
+              foregroundColor: textColor,
+              elevation: (isEngineReady && !isLimitReached) ? 8 : 0,
+              shadowColor: theme.colorScheme.primary.withAlpha(100),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
             ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 4,
-                backgroundColor: Colors.white.withAlpha(15),
-                color: isLimitReached
-                    ? theme.colorScheme.tertiary
-                    : theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // --- MAIN ACTION BUTTON ---
-            SizedBox(
-              width: double.infinity,
-              height: 64,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: buttonColor,
-                  foregroundColor: textColor,
-                  elevation: (isEngineReady && !isLimitReached) ? 8 : 0,
-                  shadowColor: theme.colorScheme.primary.withAlpha(100),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                onPressed: () {
-                  if (isLimitReached) {
-                    HapticFeedback.heavyImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor:
-                            theme.colorScheme.surfaceContainerHighest,
-                        content: Text(
-                          'Clinical limit of 4 hours reached. Prolonged focus beyond this point degrades neural pathways.',
-                          style: TextStyle(
-                            color: theme.colorScheme.tertiary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-
-                  if (!isEngineReady) {
-                    HapticFeedback.selectionClick();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor:
-                            theme.colorScheme.surfaceContainerHighest,
-                        content: Text(
-                          'Cognitive readiness too low. Wait for your biological battery to recharge before starting a new session.',
-                          style: TextStyle(
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-
-                  HapticFeedback.heavyImpact();
-                  engine.startSession();
-                  Navigator.of(
-                    context,
-                  ).push(PremiumPageRoute(page: const FocusModePage()));
-                },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(buttonIcon),
-                    const SizedBox(width: 12),
-                    Text(
-                      buttonText,
-                      style: const TextStyle(
+            onPressed: () {
+              if (isLimitReached) {
+                HapticFeedback.heavyImpact();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    content: Text(
+                      'Clinical limit of 4 hours reached. Prolonged focus beyond this point degrades neural pathways.',
+                      style: TextStyle(
+                        color: theme.colorScheme.tertiary,
                         fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
                       ),
                     ),
-                  ],
+                  ),
+                );
+                return;
+              }
+
+              if (!isEngineReady) {
+                HapticFeedback.selectionClick();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    content: Text(
+                      'Cognitive readiness too low. Wait for your biological battery to recharge before starting a new session.',
+                      style: TextStyle(
+                        color: theme.colorScheme.secondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+                return;
+              }
+
+              HapticFeedback.heavyImpact();
+              engine.startSession();
+              Navigator.of(context).push(
+                ImmersiveRoute(page: const FocusModePage()),
+              ); // Effetto immersione
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(buttonIcon),
+                const SizedBox(width: 12),
+                Text(
+                  buttonText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

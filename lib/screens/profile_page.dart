@@ -9,7 +9,6 @@ import '../utils/dashboard_helpers.dart';
 import '../utils/settings_components.dart';
 import 'login_page.dart';
 
-/// Manages the user's local identity, system connections, and developer tools.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -65,10 +64,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // ==========================================
-  // CORE DOMAIN ACTIONS
-  // ==========================================
-
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate() ||
         _isProcessing ||
@@ -76,7 +71,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!_hasUnsavedChanges) HapticFeedback.selectionClick();
       return;
     }
-
     FocusScope.of(context).unfocus();
     setState(() => _isProcessing = true);
     HapticFeedback.lightImpact();
@@ -87,12 +81,10 @@ class _ProfilePageState extends State<ProfilePage> {
         _surnameController.text.trim(),
         _nicknameController.text.trim(),
       );
-
       _initialName = _nameController.text.trim();
       _initialSurname = _surnameController.text.trim();
       _initialNickname = _nicknameController.text.trim();
       _checkForChanges();
-
       _showCustomSnackBar('Profile securely updated', isError: false);
     } catch (e) {
       _showCustomSnackBar(
@@ -108,8 +100,8 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_isProcessing) return;
     FocusScope.of(context).unfocus();
     HapticFeedback.mediumImpact();
-
     final authProvider = context.read<AuthProvider>();
+
     final bool? confirm = await _showWarningDialog(
       title: 'Purge Identity Data?',
       content:
@@ -122,16 +114,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       await authProvider.clearProfileData();
-
       _initialName = '';
       _initialSurname = '';
       _initialNickname = 'Student';
-
       _nameController.clear();
       _surnameController.clear();
       _nicknameController.text = 'Student';
       _checkForChanges();
-
       _showCustomSnackBar('Identity purged successfully', isError: true);
     } catch (e) {
       _showCustomSnackBar('Critical error during deletion.', isError: true);
@@ -144,7 +133,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_isProcessing) return;
     FocusScope.of(context).unfocus();
     HapticFeedback.heavyImpact();
-
     final analyticsProvider = context.read<AnalyticsProvider>();
     final authProvider = context.read<AuthProvider>();
 
@@ -162,8 +150,9 @@ class _ProfilePageState extends State<ProfilePage> {
       await authProvider.logout();
       if (!mounted) return;
 
+      // ROTTA SPAZIALE: Logout è un "zoom out" dall'app
       Navigator.of(context).pushAndRemoveUntil(
-        PremiumPageRoute(page: const LoginPage()),
+        ImmersiveRoute(page: const LoginPage()),
         (route) => false,
       );
     } catch (e) {
@@ -172,14 +161,9 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // ==========================================
-  // UI FEEDBACK HELPERS
-  // ==========================================
-
   void _showCustomSnackBar(String message, {required bool isError}) {
     if (!mounted) return;
     final colorScheme = Theme.of(context).colorScheme;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -245,10 +229,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ==========================================
-  // VIEW RENDERER
-  // ==========================================
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -273,10 +253,10 @@ class _ProfilePageState extends State<ProfilePage> {
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
-              // --- AMBIENT GLOW SYSTEM ---
+              // DEEP DARK GLOW
               Positioned(
                 top: -150,
-                left: -100,
+                left: -100, // glow riflesso (sinistra invece che destra)
                 child: Container(
                   width: 500,
                   height: 500,
@@ -284,9 +264,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        colorScheme.tertiary.withAlpha(45),
+                        colorScheme.tertiary.withAlpha(15),
                         Colors.transparent,
-                      ],
+                      ], // Uniformato a 15
                       stops: const [0.2, 1.0],
                     ),
                   ),
@@ -296,12 +276,10 @@ class _ProfilePageState extends State<ProfilePage> {
               CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
-                  // --- HARMONIZED SECONDARY APP BAR ---
                   SliverAppBar(
                     pinned: true,
                     stretch: true,
-                    expandedHeight:
-                        110.0, // Ridotto per bilanciare lo spazio negativo
+                    expandedHeight: 110.0,
                     toolbarHeight: 64.0,
                     backgroundColor: colorScheme.surface.withAlpha(160),
                     leading: IconButton(
@@ -319,8 +297,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                         child: FlexibleSpaceBar(
                           stretchModes: const [StretchMode.zoomBackground],
-                          centerTitle:
-                              true, // Centra il testo per bilanciare il pulsante indietro
+                          centerTitle: true,
                           titlePadding: const EdgeInsets.only(bottom: 16.0),
                           title: Text(
                             'Identity',
@@ -339,7 +316,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     padding: const EdgeInsets.fromLTRB(24.0, 32.0, 24.0, 64.0),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
-                        // --- AVATAR ---
                         Center(
                           child: Stack(
                             alignment: Alignment.bottomRight,
@@ -385,7 +361,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 48),
 
-                        // --- PERSONAL DATA FORM ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
@@ -427,7 +402,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // --- SAVE BUTTON ---
                         AnimatedOpacity(
                           duration: const Duration(milliseconds: 300),
                           opacity: _hasUnsavedChanges ? 1.0 : 0.4,
@@ -451,7 +425,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         const SizedBox(height: 48),
 
-                        // --- DEVELOPER TOOLS (SIMULATOR) ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(
@@ -464,7 +437,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         const SettingsGroup(children: [SimulatorSettingsRow()]),
                         const SizedBox(height: 48),
 
-                        // --- SYSTEM SETTINGS ---
                         Padding(
                           padding: const EdgeInsets.only(left: 16, bottom: 8),
                           child: Text(

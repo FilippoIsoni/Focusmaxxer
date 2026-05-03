@@ -6,10 +6,10 @@ import 'package:provider/provider.dart';
 import '../models/onboarding_data.dart';
 import '../utils/onboarding_slide.dart';
 import '../providers/auth_provider.dart';
+import '../utils/dashboard_helpers.dart'; // Router
+
 import 'login_page.dart';
 
-/// Orchestrates the introduction flow, teaching the user the core philosophy
-/// of the application before requesting authentication.
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
@@ -20,16 +20,13 @@ class OnboardingPage extends StatefulWidget {
 class _OnboardingPageState extends State<OnboardingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  bool _isFinishing = false; // Prevents double-tap routing bugs
-
+  bool _isFinishing = false;
   late final List<OnboardingData> _pages;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final colorScheme = Theme.of(context).colorScheme;
-
-    // Initialize content using the global theme colors
     _pages = [
       OnboardingData(
         superTitle: 'THE SAFTE™ ENGINE',
@@ -37,7 +34,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         description:
             'Forget arbitrary timers like the Pomodoro technique. FocusMaxxer uses the SAFTE™ biomathematical model to track your real cognitive battery and predict mental fatigue.',
         icon: Icons.bolt_rounded,
-        themeColor: colorScheme.primary, // Teal
+        themeColor: colorScheme.primary, // Turchese
       ),
       OnboardingData(
         superTitle: 'ADAPTIVE RECOVERY',
@@ -45,7 +42,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         description:
             'Breaks are not timed—they are biological. We monitor your physiological state, allowing you to return to work only when your vagal tone is fully restored.',
         icon: Icons.waves_rounded,
-        themeColor: colorScheme.secondary, // Amber
+        themeColor: colorScheme.secondary, // Ambra
       ),
       OnboardingData(
         superTitle: 'STRICT MODE',
@@ -53,7 +50,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
         description:
             'Once a session begins, commitment is required. Follow the AI advisory system: focus when optimal, rest when warned. Press and hold the bottom button to finalize your session.',
         icon: Icons.shield_rounded,
-        themeColor: colorScheme.tertiary, // Sky Blue
+        themeColor: colorScheme.tertiary, // Azzurro Sky
       ),
     ];
   }
@@ -64,30 +61,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
     super.dispose();
   }
 
-  /// Finalizes onboarding, saves the state to disk, and transitions to Login
   Future<void> _finishOnboarding() async {
     if (_isFinishing) return;
     setState(() => _isFinishing = true);
-    HapticFeedback.mediumImpact();
 
+    HapticFeedback.mediumImpact();
     await context.read<AuthProvider>().completeOnboarding();
 
     if (!mounted) return;
 
-    // Imperative navigation: Replace the route so the user cannot swipe back
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const LoginPage(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 600),
-      ),
-    );
+    // Nuova transizione: Scorre logicamente verso la fase successiva (Login)
+    Navigator.of(context).pushReplacement(FadeRoute(page: const LoginPage()));
   }
 
-  /// Advances to the next slide or finishes if at the end
   void _nextPage() {
     if (_currentPage == _pages.length - 1) {
       _finishOnboarding();
@@ -109,8 +95,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
     return Scaffold(
       body: Stack(
         children: [
-          // --- AMBIENT GLOW BACKGROUND ---
-          // Creates a cinematic, breathing light effect that follows the current theme color
+          // DEEP DARK GLOW BACKGROUND
           AnimatedPositioned(
             duration: const Duration(milliseconds: 800),
             curve: Curves.easeInOutCubic,
@@ -123,7 +108,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
               height: 400,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: currentData.themeColor.withAlpha(40),
+                color: currentData.themeColor.withAlpha(
+                  15,
+                ), // Allineato al minimalismo (prima era 40)
               ),
             ),
           ),
@@ -134,11 +121,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
           ),
 
-          // --- FOREGROUND CONTENT ---
+          // FOREGROUND CONTENT
           SafeArea(
             child: Column(
               children: [
-                // Top Bar (Skip Button)
                 Align(
                   alignment: Alignment.topRight,
                   child: Padding(
@@ -151,14 +137,12 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           : 1.0,
                       child: TextButton(
                         onPressed: _finishOnboarding,
-                        // Styling is automatically inherited from AppTheme.textButtonTheme
                         child: const Text('Skip'),
                       ),
                     ),
                   ),
                 ),
 
-                // Main PageView
                 Expanded(
                   child: PageView.builder(
                     controller: _pageController,
@@ -176,13 +160,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   ),
                 ),
 
-                // Bottom Navigation & Progress
                 Padding(
                   padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Animated Dot Indicators
                       Row(
                         children: List.generate(
                           _pages.length,
@@ -202,13 +184,11 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         ),
                       ),
 
-                      // Next / Start Button
                       SizedBox(
                         height: 56,
                         child: FilledButton.icon(
                           onPressed: _isFinishing ? null : _nextPage,
                           style: FilledButton.styleFrom(
-                            // Inherits padding, shape, and textStyle from AppTheme.filledButtonTheme
                             backgroundColor: currentData.themeColor,
                             foregroundColor: colorScheme.surface,
                           ),

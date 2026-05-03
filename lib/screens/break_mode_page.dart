@@ -50,8 +50,9 @@ class _BreakModePageState extends State<BreakModePage>
       HapticFeedback.heavyImpact();
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
       _engineRef.endSession('NEURAL FATIGUE');
+      // FIX COERENZA: ImmersiveRoute
       Navigator.of(context).pushReplacement(
-        PremiumPageRoute(
+        ImmersiveRoute(
           page: SessionReportPage(
             duration: duration,
             terminationReason: 'NEURAL FATIGUE',
@@ -65,8 +66,9 @@ class _BreakModePageState extends State<BreakModePage>
       _isNavigating = true;
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
       final reason = _engineRef.terminationReason;
+      // FIX COERENZA: ImmersiveRoute
       Navigator.of(context).pushReplacement(
-        PremiumPageRoute(
+        ImmersiveRoute(
           page: SessionReportPage(
             duration: duration,
             terminationReason: reason,
@@ -92,8 +94,6 @@ class _BreakModePageState extends State<BreakModePage>
     final bool isExtended = engine.hasIncompleteRecovery;
     final bool canResume = engine.isFocusRecommended;
 
-    // NUOVA SEMANTICA: La pausa è Azzurra (Calma/Tono Vagale).
-    // L'Ambra subentra solo se il recupero è incompleto (Fatica).
     final Color ambientColor = isExtended
         ? colorScheme.secondary
         : colorScheme.tertiary;
@@ -101,10 +101,9 @@ class _BreakModePageState extends State<BreakModePage>
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Stack(
           children: [
-            // --- ALLINEAMENTO UI: Glow in alto a destra come nella Home ---
             Positioned(
               top: -150,
               right: -100,
@@ -115,10 +114,7 @@ class _BreakModePageState extends State<BreakModePage>
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      ambientColor.withAlpha(isExtended ? 45 : 30),
-                      Colors.transparent,
-                    ],
+                    colors: [ambientColor.withAlpha(15), Colors.transparent],
                     stops: const [0.2, 1.0],
                   ),
                 ),
@@ -351,8 +347,9 @@ class _BreakModePageState extends State<BreakModePage>
                                 seconds: engine.sessionTotalFocusSeconds,
                               );
                               engine.endSession('MANUAL END');
+                              // FIX COERENZA: ImmersiveRoute
                               Navigator.of(context).pushReplacement(
-                                PremiumPageRoute(
+                                ImmersiveRoute(
                                   page: SessionReportPage(
                                     duration: duration,
                                     terminationReason: 'MANUAL END',
@@ -402,7 +399,7 @@ class _BreakModePageState extends State<BreakModePage>
                                     HapticFeedback.heavyImpact();
                                     engine.manualTransitionToFocus();
                                     Navigator.of(context).pushReplacement(
-                                      PremiumPageRoute(
+                                      SessionActiveRoute(
                                         page: const FocusModePage(),
                                       ),
                                     );

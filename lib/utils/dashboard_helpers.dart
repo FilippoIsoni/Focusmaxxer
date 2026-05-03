@@ -64,25 +64,86 @@ class SafteSemanticInterpreter {
 /// ==========================================
 /// CUSTOM PAGE ROUTE (Cinematic Transitions)
 /// ==========================================
-class PremiumPageRoute extends PageRouteBuilder {
-  final Widget page;
 
-  PremiumPageRoute({required this.page})
+/// 1. IMMERSIVE ROUTE: Entrata in Focus o click su card Analytics (Zoom + Fade)
+class ImmersiveRoute extends PageRouteBuilder {
+  final Widget page;
+  ImmersiveRoute({required this.page})
     : super(
         pageBuilder: (context, animation, secondaryAnimation) => page,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          var curveTween = CurveTween(curve: Curves.easeInOutCubic);
+          var curveTween = CurveTween(curve: Curves.easeOutCubic);
           return FadeTransition(
             opacity: animation.drive(curveTween),
             child: ScaleTransition(
               scale: animation.drive(
-                Tween<double>(begin: 0.97, end: 1.0).chain(curveTween),
+                Tween<double>(begin: 0.95, end: 1.0).chain(curveTween),
               ),
               child: child,
             ),
           );
         },
         transitionDuration: const Duration(milliseconds: 600),
+        reverseTransitionDuration: const Duration(milliseconds: 400),
+      );
+}
+
+/// 2. FADE ROUTE: Dissolvenza standard per il Profilo e l'Onboarding
+class FadeRoute extends PageRouteBuilder {
+  final Widget page;
+  FadeRoute({required this.page})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation.drive(CurveTween(curve: Curves.easeInOutCubic)),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 400),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+      );
+}
+
+/// 3. SESSION ACTIVE ROUTE: Transizione fulminea per Focus <-> Break
+class SessionActiveRoute extends PageRouteBuilder {
+  final Widget page;
+  SessionActiveRoute({required this.page})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Un fade rapidissimo, sembra quasi istantaneo ma evita lo stacco netto
+          return FadeTransition(
+            opacity: animation.drive(CurveTween(curve: Curves.easeOut)),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(
+          milliseconds: 250,
+        ), // Molto più veloce!
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+      );
+}
+
+/// 4. MODAL UP ROUTE: Il Report di fine sessione emerge dal basso
+class ModalUpRoute extends PageRouteBuilder {
+  final Widget page;
+  ModalUpRoute({required this.page})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          var curveTween = CurveTween(curve: Curves.easeOutCubic);
+          return SlideTransition(
+            position: animation.drive(
+              Tween<Offset>(
+                begin: const Offset(0.0, 1.0),
+                end: Offset.zero,
+              ).chain(curveTween),
+            ),
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 500),
         reverseTransitionDuration: const Duration(milliseconds: 400),
       );
 }

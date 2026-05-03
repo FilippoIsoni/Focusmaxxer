@@ -72,10 +72,11 @@ class SessionReportPage extends StatelessWidget {
     return PopScope(
       canPop: isHistory,
       child: Scaffold(
-        backgroundColor: colorScheme.surface,
+        // FIX NERO PROFONDO
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Stack(
           children: [
-            // --- ALLINEAMENTO UI: Singolo Ambient Glow top-right coerente con la Home ---
+            // AMBIENT GLOW ALLINEATO ALLA HOME
             Positioned(
               top: -150,
               right: -100,
@@ -85,13 +86,17 @@ class SessionReportPage extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [badgeColor.withAlpha(45), Colors.transparent],
+                    colors: [
+                      badgeColor.withAlpha(15),
+                      Colors.transparent,
+                    ], // Scurissimo e pulito
                     stops: const [0.2, 1.0],
                   ),
                 ),
               ),
             ),
 
+            // RIMOSSO IL BACKDROP FILTER A TUTTO SCHERMO CHE ROVINAVA I NERI
             SafeArea(
               child: CustomScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -112,10 +117,10 @@ class SessionReportPage extends StatelessWidget {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: badgeColor.withAlpha(30),
+                              color: badgeColor.withAlpha(20),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: badgeColor.withAlpha(60),
+                                color: badgeColor.withAlpha(40),
                               ),
                             ),
                             child: Row(
@@ -197,10 +202,10 @@ class SessionReportPage extends StatelessWidget {
                             padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
                             decoration: BoxDecoration(
                               color: colorScheme.surfaceContainerHighest
-                                  .withAlpha(60),
+                                  .withAlpha(50),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: Colors.white.withAlpha(15),
+                                color: Colors.white.withAlpha(10),
                               ),
                             ),
                             child: hrTimeline.isEmpty
@@ -224,7 +229,6 @@ class SessionReportPage extends StatelessWidget {
                                     'Focus Phase',
                                   ),
                                   const SizedBox(width: 24),
-                                  // Semantica applicata: La pausa è azzurra!
                                   _buildLegendItem(
                                     colorScheme.tertiary,
                                     'Recovery Phase',
@@ -236,6 +240,7 @@ class SessionReportPage extends StatelessWidget {
                           const Spacer(),
                           const SizedBox(height: 40),
 
+                          // FIX SAFE AREA BOTTONE
                           SafeArea(
                             top: false,
                             child: SizedBox(
@@ -315,9 +320,9 @@ class SessionReportPage extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withAlpha(60),
+            color: colorScheme.surfaceContainerHighest.withAlpha(50),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withAlpha(15)),
+            border: Border.all(color: Colors.white.withAlpha(10)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,7 +373,6 @@ class SessionReportPage extends StatelessWidget {
         VerticalRangeAnnotation(
           x1: startX,
           x2: endX,
-          // Semantica applicata al grafico: Turchese (Focus) / Azzurro (Break)
           color: isFocus
               ? colorScheme.primary.withAlpha(15)
               : colorScheme.tertiary.withAlpha(20),
@@ -390,7 +394,7 @@ class SessionReportPage extends StatelessWidget {
           horizontalLines: [
             HorizontalLine(
               y: avgHr.toDouble(),
-              color: Colors.white.withAlpha(50),
+              color: Colors.white.withAlpha(30),
               strokeWidth: 1,
               dashArray: [5, 5],
             ),
@@ -400,7 +404,7 @@ class SessionReportPage extends StatelessWidget {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: Colors.white.withAlpha(200),
+            color: Colors.white.withAlpha(180),
             barWidth: 2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),

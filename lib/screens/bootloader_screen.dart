@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/safte_provider.dart';
 import '../providers/analytics_provider.dart';
 import '../services/impact_api_service.dart';
+import '../utils/dashboard_helpers.dart'; // Aggiunto per le nuove transizioni
 
 import 'home_dashboard.dart';
 import 'login_page.dart';
@@ -26,7 +27,6 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
   @override
   void initState() {
     super.initState();
-    // Wait for the first frame to safely access Provider context
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _executeSystemBootSequence();
     });
@@ -61,7 +61,6 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
       if (!mounted) return;
 
       // 3. SYNCHRONIZE BIOMATHEMATICAL ENGINE
-      // FIX: Passing the correct clinical parameters to the SafteProvider
       final bool isNewBiologicalDay = await safte.syncWithServer(
         sWake: baseline.wakeupTime,
         sSleep: baseline.bedTime,
@@ -76,7 +75,7 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
 
       if (!mounted) return;
 
-      // 5. SYSTEM READY -> LAUNCH
+      // 5. SYSTEM READY -> LAUNCH (Tuffo nel sistema)
       _routeTo(const HomeDashboard());
     } catch (e) {
       debugPrint("Bootloader Error: $e");
@@ -90,15 +89,8 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
   }
 
   void _routeTo(Widget page) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => page,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 800),
-      ),
-    );
+    // Sostituito il vecchio router custom con il nostro ImmersiveRoute ufficiale
+    Navigator.of(context).pushReplacement(ImmersiveRoute(page: page));
   }
 
   @override

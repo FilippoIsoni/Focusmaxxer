@@ -58,18 +58,16 @@ class AnalyticsTab extends StatelessWidget {
                     final dateStr =
                         "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year}";
 
-                    // NUOVA SEMANTICA COLORI E ICONE
                     Color reasonColor;
                     IconData reasonIcon;
                     if (session.terminationReason == 'CLINICAL LIMIT REACHED') {
-                      reasonColor =
-                          colorScheme.tertiary; // Azzurro: Traguardo Premium
+                      reasonColor = colorScheme.tertiary;
                       reasonIcon = Icons.military_tech_rounded;
                     } else if (session.terminationReason == 'NEURAL FATIGUE') {
-                      reasonColor = colorScheme.secondary; // Ambra: Esaurimento
+                      reasonColor = colorScheme.secondary;
                       reasonIcon = Icons.battery_alert_rounded;
                     } else {
-                      reasonColor = colorScheme.primary; // Turchese: Normale
+                      reasonColor = colorScheme.primary;
                       reasonIcon = Icons.check_circle_rounded;
                     }
 
@@ -90,34 +88,33 @@ class AnalyticsTab extends StatelessWidget {
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () {
+                                // Decodifica sicura della timeline
+                                List<Map<String, dynamic>> decodedTimeline = [];
+                                try {
+                                  decodedTimeline =
+                                      (jsonDecode(session.hrTimelineJson)
+                                              as List<dynamic>)
+                                          .map(
+                                            (e) => Map<String, dynamic>.from(
+                                              e as Map,
+                                            ),
+                                          )
+                                          .toList();
+                                } catch (_) {}
+
+                                // FIX: Routing corretto utilizzando il parametro 'page:'
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (context) {
-                                      List<Map<String, dynamic>>
-                                      decodedTimeline = [];
-                                      try {
-                                        decodedTimeline =
-                                            (jsonDecode(session.hrTimelineJson)
-                                                    as List<dynamic>)
-                                                .map(
-                                                  (e) =>
-                                                      Map<String, dynamic>.from(
-                                                        e as Map,
-                                                      ),
-                                                )
-                                                .toList();
-                                      } catch (_) {}
-                                      return SessionReportPage(
-                                        duration: Duration(
-                                          seconds: session.durationSeconds,
-                                        ),
-                                        isHistory: true,
-                                        historicalTimeline: decodedTimeline,
-                                        terminationReason:
-                                            session.terminationReason,
-                                      );
-                                    },
+                                  ImmersiveRoute(
+                                    page: SessionReportPage(
+                                      duration: Duration(
+                                        seconds: session.durationSeconds,
+                                      ),
+                                      isHistory: true,
+                                      historicalTimeline: decodedTimeline,
+                                      terminationReason:
+                                          session.terminationReason,
+                                    ),
                                   ),
                                 );
                               },
@@ -130,7 +127,6 @@ class AnalyticsTab extends StatelessWidget {
                                 ),
                                 child: Row(
                                   children: [
-                                    // ICONA SEMANTICA
                                     Container(
                                       padding: const EdgeInsets.all(14),
                                       decoration: BoxDecoration(
@@ -145,7 +141,6 @@ class AnalyticsTab extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 16),
 
-                                    // DETTAGLI E BADGE MINUTI (LAYOUT PULITO)
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -165,7 +160,6 @@ class AnalyticsTab extends StatelessWidget {
                                                     ),
                                               ),
                                               const SizedBox(width: 12),
-                                              // BADGE DELLA DURATA
                                               Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
@@ -204,15 +198,12 @@ class AnalyticsTab extends StatelessWidget {
                                       ),
                                     ),
 
-                                    // CESTINO ISOLATO
                                     IconButton(
                                       icon: const Icon(
                                         Icons.delete_outline_rounded,
                                         size: 22,
                                       ),
-                                      color: Colors.white.withAlpha(
-                                        70,
-                                      ), // Reso più neutro
+                                      color: Colors.white.withAlpha(70),
                                       onPressed: () =>
                                           analytics.deleteSession(session),
                                       tooltip: 'Delete session',

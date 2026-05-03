@@ -41,8 +41,10 @@ class _FocusModePageState extends State<FocusModePage> {
         seconds: _engineListener!.sessionTotalFocusSeconds,
       );
       final reason = _engineListener!.terminationReason;
+
+      // FIX COERENZA: Usiamo l'ImmersiveRoute per "tuffarci" nel report esattamente come dalla tab Analytics
       Navigator.of(context).pushReplacement(
-        PremiumPageRoute(
+        ImmersiveRoute(
           page: SessionReportPage(
             duration: fakeElapsed,
             terminationReason: reason,
@@ -62,10 +64,9 @@ class _FocusModePageState extends State<FocusModePage> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: theme.scaffoldBackgroundColor,
         body: Stack(
           children: [
-            // --- ALLINEAMENTO UI: Glow in alto a destra ---
             Positioned(
               top: -150,
               right: -100,
@@ -78,8 +79,8 @@ class _FocusModePageState extends State<FocusModePage> {
                   gradient: RadialGradient(
                     colors: [
                       isCalibration
-                          ? colorScheme.tertiary.withAlpha(45)
-                          : colorScheme.primary.withAlpha(45),
+                          ? colorScheme.tertiary.withAlpha(15)
+                          : colorScheme.primary.withAlpha(15),
                       Colors.transparent,
                     ],
                     stops: const [0.2, 1.0],
@@ -235,8 +236,9 @@ class _FocusModePageState extends State<FocusModePage> {
                                       context
                                           .read<CognitiveEngineProvider>()
                                           .manualTransitionToBreak();
+                                      // Focus -> Break mantiene il SessionActiveRoute (scatto rapido)
                                       Navigator.of(context).pushReplacement(
-                                        PremiumPageRoute(
+                                        SessionActiveRoute(
                                           page: const BreakModePage(),
                                         ),
                                       );
@@ -367,7 +369,7 @@ class _FocusModePageState extends State<FocusModePage> {
   }
 }
 
-// ... Overlays private identici a prima ...
+// Overlays privati rimasti identici
 class _CalibrationAnomalyOverlay extends StatelessWidget {
   const _CalibrationAnomalyOverlay();
   @override

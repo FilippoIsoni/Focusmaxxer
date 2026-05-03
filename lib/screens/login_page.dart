@@ -4,9 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../utils/dashboard_helpers.dart'; // Router
 import 'bootloader_screen.dart';
 
-/// Authenticates the user and initiates the telemetry synchronization pipeline.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -17,7 +17,6 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   bool _isLoading = false;
-
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -28,11 +27,8 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// Processes credentials and routes to the Bootloader on success
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
-
-    // Prevent empty submissions
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {
       HapticFeedback.selectionClick();
@@ -50,24 +46,15 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // Route to Bootloader to fetch biometric data and synchronize the engine
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const BootloaderScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 600),
-        ),
-      );
+      // Nuova Transizione: Immersione nel Bootloader (il sistema "risucchia" l'utente)
+      Navigator.of(
+        context,
+      ).pushReplacement(ImmersiveRoute(page: const BootloaderScreen()));
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-
       final colorScheme = Theme.of(context).colorScheme;
 
-      // Styling is inherited from AppTheme.snackBarTheme
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -94,13 +81,12 @@ class _LoginPageState extends State<LoginPage> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      // Background color inherited from AppTheme
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.opaque,
         child: Stack(
           children: [
-            // --- AMBIENT GLOW BACKGROUND ---
+            // DEEP DARK GLOW BACKGROUND
             Positioned(
               top: 100,
               left: MediaQuery.of(context).size.width / 2 - 150,
@@ -109,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
                 height: 300,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: colorScheme.primary.withAlpha(25),
+                  color: colorScheme.primary.withAlpha(15), // Uniformato
                 ),
               ),
             ),
@@ -120,7 +106,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-            // --- FOREGROUND CONTENT ---
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -142,7 +127,7 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // --- BRAND ICON ---
+                        // BRAND ICON
                         Align(
                           alignment: Alignment.center,
                           child: Container(
@@ -164,19 +149,15 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 24),
 
-                        // --- BRAND TITLE ---
                         Text(
                           'FOCUSMAXXER',
                           textAlign: TextAlign.center,
-                          // Inherits w900 and letterSpacing from AppTheme.textTheme
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 60),
 
-                        // --- INPUT FIELDS ---
-                        // Decoration and styling inherited from AppTheme.inputDecorationTheme
                         TextFormField(
                           controller: _emailController,
                           textInputAction: TextInputAction.next,
@@ -215,31 +196,25 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // --- FORGOT PASSWORD ---
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: _isLoading
                                 ? null
-                                : () {
-                                    HapticFeedback.lightImpact();
-                                  },
-                            // Styling inherited from AppTheme.textButtonTheme
+                                : () => HapticFeedback.lightImpact(),
                             child: const Text('Forgot Password?'),
                           ),
                         ),
                         const SizedBox(height: 32),
 
-                        // --- SUBMIT BUTTON ---
                         SizedBox(
                           height: 56,
                           child: FilledButton(
                             onPressed: _isLoading ? null : _handleLogin,
-                            // Styling inherited from AppTheme.filledButtonTheme
                             child: _isLoading
                                 ? SizedBox(
-                                    height: 24,
                                     width: 24,
+                                    height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
                                       color: colorScheme.onPrimary,
