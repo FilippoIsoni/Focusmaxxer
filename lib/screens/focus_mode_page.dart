@@ -39,6 +39,7 @@ class _FocusModePageState extends State<FocusModePage> {
       final fakeElapsed = Duration(
         seconds: _engineListener!.sessionTotalFocusSeconds,
       );
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => SessionReportPage(duration: fakeElapsed),
@@ -103,7 +104,6 @@ class _FocusModePageState extends State<FocusModePage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          // Status Badge
                           Row(
                             children: [
                               Icon(
@@ -128,7 +128,6 @@ class _FocusModePageState extends State<FocusModePage> {
                               ),
                             ],
                           ),
-                          // Daily Limit Countdown
                           Row(
                             children: [
                               Icon(
@@ -363,23 +362,34 @@ class _FocusModePageState extends State<FocusModePage> {
               ),
             ),
 
+            // Overlays
             if (engine.isCalibrationAnomaly)
-              _buildAnomalyOverlay(context, colorScheme)
+              const _CalibrationAnomalyOverlay()
             else if (engine.isAfkWarningActive)
-              _buildAfkOverlay(context, colorScheme),
+              const _AfkWarningOverlay(),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildAnomalyOverlay(BuildContext context, ColorScheme colorScheme) {
+// ==========================================
+// PRIVATE SUB-WIDGETS FOR OVERLAYS
+// ==========================================
+
+class _CalibrationAnomalyOverlay extends StatelessWidget {
+  const _CalibrationAnomalyOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Positioned.fill(
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
           child: Container(
-            color: Colors.black.withAlpha(180),
+            color: colorScheme.surface.withAlpha(180),
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -466,14 +476,20 @@ class _FocusModePageState extends State<FocusModePage> {
       ),
     );
   }
+}
 
-  Widget _buildAfkOverlay(BuildContext context, ColorScheme colorScheme) {
+class _AfkWarningOverlay extends StatelessWidget {
+  const _AfkWarningOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Positioned.fill(
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
           child: Container(
-            color: Colors.black.withAlpha(150),
+            color: colorScheme.surface.withAlpha(150),
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -520,7 +536,7 @@ class _FocusModePageState extends State<FocusModePage> {
                     ),
                     style: FilledButton.styleFrom(
                       backgroundColor: colorScheme.secondary,
-                      foregroundColor: Colors.black,
+                      foregroundColor: colorScheme.onSurface,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 32,
                         vertical: 20,
@@ -536,6 +552,10 @@ class _FocusModePageState extends State<FocusModePage> {
     );
   }
 }
+
+// ==========================================
+// SESSION TIMER DISPLAY
+// ==========================================
 
 class _SessionTimerDisplay extends StatelessWidget {
   const _SessionTimerDisplay();

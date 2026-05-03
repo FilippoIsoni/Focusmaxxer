@@ -19,7 +19,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
-
   late final TextEditingController _nameController;
   late final TextEditingController _surnameController;
   late final TextEditingController _nicknameController;
@@ -35,7 +34,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
-
     _initialName = auth.name;
     _initialSurname = auth.surname;
     _initialNickname = auth.nickname;
@@ -93,8 +91,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _initialName = _nameController.text.trim();
       _initialSurname = _surnameController.text.trim();
       _initialNickname = _nicknameController.text.trim();
-
       _checkForChanges();
+
       _showCustomSnackBar('Profile securely updated', isError: false);
     } catch (e) {
       _showCustomSnackBar(
@@ -120,7 +118,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm != true || !mounted) return;
-
     setState(() => _isProcessing = true);
 
     try {
@@ -133,8 +130,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _nameController.clear();
       _surnameController.clear();
       _nicknameController.text = 'Student';
-
       _checkForChanges();
+
       _showCustomSnackBar('Identity purged successfully', isError: true);
     } catch (e) {
       _showCustomSnackBar('Critical error during deletion.', isError: true);
@@ -158,13 +155,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm != true || !mounted) return;
-
     setState(() => _isProcessing = true);
 
     try {
       await analyticsProvider.saveWorkloadToDisk();
       await authProvider.logout();
-
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
@@ -278,18 +273,18 @@ class _ProfilePageState extends State<ProfilePage> {
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
-              // --- AMBIENT GLOW ---
+              // --- AMBIENT GLOW SYSTEM ---
               Positioned(
                 top: -150,
-                left: -50,
+                left: -100,
                 child: Container(
-                  width: 400,
-                  height: 400,
+                  width: 500,
+                  height: 500,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        colorScheme.tertiary.withAlpha(30),
+                        colorScheme.tertiary.withAlpha(45),
                         Colors.transparent,
                       ],
                       stops: const [0.2, 1.0],
@@ -301,10 +296,14 @@ class _ProfilePageState extends State<ProfilePage> {
               CustomScrollView(
                 physics: const BouncingScrollPhysics(),
                 slivers: [
+                  // --- HARMONIZED SECONDARY APP BAR ---
                   SliverAppBar(
                     pinned: true,
                     stretch: true,
-                    expandedHeight: 120.0,
+                    expandedHeight:
+                        110.0, // Ridotto per bilanciare lo spazio negativo
+                    toolbarHeight: 64.0,
+                    backgroundColor: colorScheme.surface.withAlpha(160),
                     leading: IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new_rounded),
                       onPressed: () {
@@ -317,24 +316,27 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     flexibleSpace: ClipRect(
                       child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+                        filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
                         child: FlexibleSpaceBar(
+                          stretchModes: const [StretchMode.zoomBackground],
+                          centerTitle:
+                              true, // Centra il testo per bilanciare il pulsante indietro
+                          titlePadding: const EdgeInsets.only(bottom: 16.0),
                           title: Text(
                             'Identity',
                             style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5,
                             ),
                           ),
-                          centerTitle: true,
-                          background: Container(
-                            color: colorScheme.surface.withAlpha(160),
-                          ),
+                          background: const SizedBox(),
                         ),
                       ),
                     ),
                   ),
+
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 64.0),
+                    padding: const EdgeInsets.fromLTRB(24.0, 32.0, 24.0, 64.0),
                     sliver: SliverList(
                       delegate: SliverChildListDelegate([
                         // --- AVATAR ---
