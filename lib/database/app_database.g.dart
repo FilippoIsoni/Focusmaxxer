@@ -82,7 +82,7 @@ class _$AppDatabase extends AppDatabase {
       },
       onCreate: (database, version) async {
         await database.execute(
-          'CREATE TABLE IF NOT EXISTS `CognitiveSession` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `date` TEXT NOT NULL, `durationSeconds` INTEGER NOT NULL, `perceivedExertion` INTEGER NOT NULL, `endingEffectiveness` REAL NOT NULL, `hrTimelineJson` TEXT NOT NULL, `terminationReason` TEXT NOT NULL)',
+          'CREATE TABLE IF NOT EXISTS `CognitiveSession` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `date` TEXT NOT NULL, `durationSeconds` INTEGER NOT NULL, `endingEffectiveness` REAL NOT NULL, `hrTimelineJson` TEXT NOT NULL, `terminationReason` TEXT NOT NULL)',
         );
         await callback?.onCreate?.call(database, version);
       },
@@ -106,7 +106,6 @@ class _$SessionDao extends SessionDao {
           'id': item.id,
           'date': item.date,
           'durationSeconds': item.durationSeconds,
-          'perceivedExertion': item.perceivedExertion,
           'endingEffectiveness': item.endingEffectiveness,
           'hrTimelineJson': item.hrTimelineJson,
           'terminationReason': item.terminationReason,
@@ -120,7 +119,6 @@ class _$SessionDao extends SessionDao {
           'id': item.id,
           'date': item.date,
           'durationSeconds': item.durationSeconds,
-          'perceivedExertion': item.perceivedExertion,
           'endingEffectiveness': item.endingEffectiveness,
           'hrTimelineJson': item.hrTimelineJson,
           'terminationReason': item.terminationReason,
@@ -141,7 +139,6 @@ class _$SessionDao extends SessionDao {
         id: row['id'] as int?,
         date: row['date'] as String,
         durationSeconds: row['durationSeconds'] as int,
-        perceivedExertion: row['perceivedExertion'] as int,
         endingEffectiveness: row['endingEffectiveness'] as double,
         hrTimelineJson: row['hrTimelineJson'] as String,
         terminationReason: row['terminationReason'] as String,

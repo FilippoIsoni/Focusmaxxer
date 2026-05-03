@@ -13,25 +13,28 @@ import 'providers/clock_provider.dart';
 import 'providers/safte_provider.dart';
 import 'providers/cognitive_engine_provider.dart';
 
-// --- DATABASE ---
+// --- DATABASE & REPOSITORY ---
 import 'database/app_database.dart';
+import 'database/session_repository.dart';
 
 // --- UTILS & SCREENS ---
 import 'utils/app_theme.dart';
 import 'screens/bootloader_screen.dart';
 
-/// App Entry Point: Initializes hardware bindings and core memory.
+/// App Entry Point: Initializes hardware bindings, core memory, and database.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Lock orientation to portrait (standard for focus apps)
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  // Load disk storage globally ONCE to prevent async gaps
+  // Load local disk storage globally ONCE to prevent async gaps
   final prefs = await SharedPreferences.getInstance();
 
-  // Initialize Floor database
-  final database = await $FloorAppDatabase.databaseBuilder('app_database_v2.db').build();
+  // Initialize Floor relational database
+  final database = await $FloorAppDatabase
+      .databaseBuilder('app_database_v2.db')
+      .build();
 
   runApp(FocusMaxxerApp(prefs: prefs, database: database));
 }
@@ -40,26 +43,38 @@ class FocusMaxxerApp extends StatelessWidget {
   final SharedPreferences prefs;
   final AppDatabase database;
 
-  const FocusMaxxerApp({super.key, required this.prefs, required this.database});
+  const FocusMaxxerApp({
+    super.key,
+    required this.prefs,
+    required this.database,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // 1. Network Layer
+        // 1. Data Layer & Network Layer
+        Provider<SessionRepository>(create: (_) => SessionRepository(database)),
         Provider<ImpactApiService>(create: (_) => ImpactApiService()),
         Provider<DeviceHardwareService>(create: (_) => DeviceHardwareService()),
 
         // 2. Base State Providers
         ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
-        ChangeNotifierProvider(create: (_) => AnalyticsProvider(prefs, database.sessionDao)),
         ChangeNotifierProvider(create: (_) => SafteProvider(prefs)),
         ChangeNotifierProvider(
           create: (_) =>
               GlobalClockProvider(speedMultiplier: 60.0, virtualTickSeconds: 5),
         ),
 
-        // 3. Central Cognitive Engine (Requires Clock, Safte, Analytics)
+        // 3. Dependent Providers
+        ChangeNotifierProxyProvider<SessionRepository, AnalyticsProvider>(
+          create: (context) =>
+              AnalyticsProvider(prefs, context.read<SessionRepository>()),
+          update: (context, repository, previous) =>
+              previous ?? AnalyticsProvider(prefs, repository),
+        ),
+
+        // 4. Central Cognitive Engine (Requires Clock, Safte, Analytics)
         ChangeNotifierProvider(
           create: (context) => CognitiveEngineProvider(
             context.read<SafteProvider>(),

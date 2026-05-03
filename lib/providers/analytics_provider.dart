@@ -2,26 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/session_data.dart';
-import '../database/session_dao.dart';
+import '../database/session_repository.dart';
 
 /// Manages the persistence of user workload and historical sessions.
-/// It operates strictly as a vault, accepting data only when explicitly commanded.
+/// Operates strictly as a vault, accepting data only when explicitly commanded.
 class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   final SharedPreferences prefs;
+  final SessionRepository _repository;
 
   // --- LIVE STATE ---
   int _dailyWorkedSeconds = 0;
   int get dailyWorkedSeconds => _dailyWorkedSeconds;
 
-  // --- STORICO SESSIONI ---
-  final SessionDao _sessionDao;
+  // --- HISTORY STATE ---
   List<CognitiveSession> _sessions = [];
   List<CognitiveSession> get sessions => List.unmodifiable(_sessions);
 
-  AnalyticsProvider(this.prefs, this._sessionDao) {
+  AnalyticsProvider(this.prefs, this._repository) {
     WidgetsBinding.instance.addObserver(this);
     _dailyWorkedSeconds = prefs.getInt('worked_seconds') ?? 0;
-    _loadSessions();
+    _loadSessionsHistory();
   }
 
   @override
@@ -45,18 +45,18 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> commitValidatedSession(CognitiveSession session) async {
     _dailyWorkedSeconds += session.durationSeconds;
 
-    // Save to Floor DB and retrieve the generated ID
-    final insertedId = await _sessionDao.insertSession(session);
+    // Save via Repository and retrieve the auto-generated ID
+    final insertedId = await _repository.saveSession(session);
 
-    // Create the final object with the new ID and ALL properties
+    // Reconstruct the immutable object with the DB-assigned ID
+    // L'RPE è stato rimosso per rispecchiare l'entità corretta.
     final insertedSession = CognitiveSession(
       id: insertedId,
       date: session.date,
       durationSeconds: session.durationSeconds,
-      perceivedExertion: session.perceivedExertion,
       endingEffectiveness: session.endingEffectiveness,
       hrTimelineJson: session.hrTimelineJson,
-      terminationReason: session.terminationReason, // FIX: Mancava questo!
+      terminationReason: session.terminationReason,
     );
 
     _sessions.insert(0, insertedSession);
@@ -64,9 +64,9 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Deletes a session from both DB and local state
+  /// Deletes a session from both the database and the local reactive state.
   Future<void> deleteSession(CognitiveSession session) async {
-    await _sessionDao.deleteSession(session);
+    await _repository.deleteSession(session);
     _sessions.removeWhere((s) => s.id == session.id);
     notifyListeners();
   }
@@ -82,14 +82,18 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ==========================================
-  // HISTORY PERSISTENCE (Floor DB)
+  // HISTORY HYDRATION
   // ==========================================
 
   int get totalFocusSeconds =>
       _sessions.fold(0, (sum, s) => sum + s.durationSeconds);
 
-  Future<void> _loadSessions() async {
-    _sessions = await _sessionDao.findAllSessions();
+  Future<void> _loadSessionsHistory() async {
+    // FIX SICUREZZA: Usiamo List.from() per clonare i dati in una lista 'growable',
+    // altrimenti Floor potrebbe restituire una lista fissa, causando
+    // un UnsupportedError quando tentiamo di fare .insert() o .removeWhere().
+    final dbSessions = await _repository.getAllSessions();
+    _sessions = List<CognitiveSession>.from(dbSessions);
     notifyListeners();
   }
 }

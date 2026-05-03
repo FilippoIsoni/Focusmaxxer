@@ -22,7 +22,7 @@ class AnalyticsTab extends StatelessWidget {
         return CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            PremiumSliverAppBar(title: 'Analytics'),
+            const PremiumSliverAppBar(title: 'Analytics'),
 
             // --- SESSION LIST ---
             if (sessions.isEmpty)
@@ -62,13 +62,22 @@ class AnalyticsTab extends StatelessWidget {
                     final dateStr =
                         "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year} - ${sessionDate.hour.toString().padLeft(2, '0')}:${sessionDate.minute.toString().padLeft(2, '0')}";
 
+                    // Colore semantico in base al risultato della sessione
+                    Color reasonColor;
+                    if (session.terminationReason == 'CLINICAL LIMIT REACHED') {
+                      reasonColor = colorScheme.error;
+                    } else if (session.terminationReason == 'NEURAL FATIGUE') {
+                      reasonColor = colorScheme.secondary;
+                    } else {
+                      reasonColor = colorScheme.primary;
+                    }
+
                     return InkWell(
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) {
-                              // Deserializza la timeline HR dal JSON salvato
                               List<Map<String, dynamic>> decodedTimeline = [];
                               try {
                                 final timelineList =
@@ -88,8 +97,7 @@ class AnalyticsTab extends StatelessWidget {
                                 ),
                                 isHistory: true,
                                 historicalTimeline: decodedTimeline,
-                                terminationReason: session
-                                    .terminationReason, // <-- Aggiungi questo!
+                                terminationReason: session.terminationReason,
                               );
                             },
                           ),
@@ -132,10 +140,13 @@ class AnalyticsTab extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
+                                  // Abbiamo sostituito l'RPE con la ragione della chiusura!
                                   Text(
-                                    "Intensity: ${session.perceivedExertion}/5",
+                                    session.terminationReason,
                                     style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
+                                      color: reasonColor,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.0,
                                     ),
                                   ),
                                 ],
@@ -149,7 +160,6 @@ class AnalyticsTab extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            // Pulsante cestino per eliminare la sessione
                             IconButton(
                               icon: Icon(
                                 Icons.delete_outline_rounded,
@@ -166,7 +176,6 @@ class AnalyticsTab extends StatelessWidget {
                   }, childCount: sessions.length),
                 ),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         );

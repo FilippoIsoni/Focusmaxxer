@@ -9,7 +9,6 @@ class CognitiveSession {
   final int? id;
   final String date; // ISO 8601 string
   final int durationSeconds;
-  final int perceivedExertion; // RPE (1-5) - Kept for DB backward compatibility
   final double endingEffectiveness; // Final SAFTE score
   final String hrTimelineJson; // JSON-serialized HR timeline array
   final String terminationReason; // Why the session ended
@@ -18,7 +17,6 @@ class CognitiveSession {
     this.id,
     required this.date,
     required this.durationSeconds,
-    required this.perceivedExertion,
     required this.endingEffectiveness,
     required this.hrTimelineJson,
     required this.terminationReason,
@@ -28,7 +26,6 @@ class CognitiveSession {
     'id': id,
     'date': date,
     'durationSeconds': durationSeconds,
-    'perceivedExertion': perceivedExertion,
     'endingEffectiveness': endingEffectiveness,
     'hrTimelineJson': hrTimelineJson,
     'terminationReason': terminationReason,
@@ -39,7 +36,6 @@ class CognitiveSession {
       id: json['id'] as int?,
       date: json['date'] as String,
       durationSeconds: json['durationSeconds'] as int,
-      perceivedExertion: json['perceivedExertion'] as int,
       endingEffectiveness: (json['endingEffectiveness'] as num).toDouble(),
       hrTimelineJson: json['hrTimelineJson'] as String? ?? '[]',
       terminationReason: json['terminationReason'] as String? ?? 'MANUAL END',
@@ -84,7 +80,6 @@ class ActiveSessionBuffer {
     return CognitiveSession(
       date: startTime.toIso8601String(),
       durationSeconds: totalFocusSeconds,
-      perceivedExertion: 3,
       endingEffectiveness: finalEffectiveness,
       hrTimelineJson: jsonEncode(hrTimeline),
       terminationReason: reason,
