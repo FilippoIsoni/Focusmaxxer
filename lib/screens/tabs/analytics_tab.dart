@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -6,7 +7,6 @@ import '../../providers/analytics_provider.dart';
 import '../../utils/dashboard_helpers.dart';
 import '../session_report.dart';
 
-/// Analytics view rendering the user's session history as a simple list.
 class AnalyticsTab extends StatelessWidget {
   const AnalyticsTab({super.key});
 
@@ -20,11 +20,12 @@ class AnalyticsTab extends StatelessWidget {
         final sessions = analytics.sessions;
 
         return CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
           slivers: [
             const PremiumSliverAppBar(title: 'Analytics'),
 
-            // --- SESSION LIST ---
             if (sessions.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -48,128 +49,179 @@ class AnalyticsTab extends StatelessWidget {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 140),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final session = sessions[index];
                     final durationMins = session.durationSeconds ~/ 60;
-
-                    // Formatta la data in DD/MM/YYYY - HH:MM
                     final sessionDate = DateTime.parse(session.date);
                     final dateStr =
-                        "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year} - ${sessionDate.hour.toString().padLeft(2, '0')}:${sessionDate.minute.toString().padLeft(2, '0')}";
+                        "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year}";
 
-                    // Colore semantico in base al risultato della sessione
+                    // NUOVA SEMANTICA COLORI E ICONE
                     Color reasonColor;
+                    IconData reasonIcon;
                     if (session.terminationReason == 'CLINICAL LIMIT REACHED') {
-                      reasonColor = colorScheme.error;
+                      reasonColor =
+                          colorScheme.tertiary; // Azzurro: Traguardo Premium
+                      reasonIcon = Icons.military_tech_rounded;
                     } else if (session.terminationReason == 'NEURAL FATIGUE') {
-                      reasonColor = colorScheme.secondary;
+                      reasonColor = colorScheme.secondary; // Ambra: Esaurimento
+                      reasonIcon = Icons.battery_alert_rounded;
                     } else {
-                      reasonColor = colorScheme.primary;
+                      reasonColor = colorScheme.primary; // Turchese: Normale
+                      reasonIcon = Icons.check_circle_rounded;
                     }
 
-                    return InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) {
-                              List<Map<String, dynamic>> decodedTimeline = [];
-                              try {
-                                final timelineList =
-                                    jsonDecode(session.hrTimelineJson)
-                                        as List<dynamic>;
-                                decodedTimeline = timelineList
-                                    .map(
-                                      (e) =>
-                                          Map<String, dynamic>.from(e as Map),
-                                    )
-                                    .toList();
-                              } catch (_) {}
-
-                              return SessionReportPage(
-                                duration: Duration(
-                                  seconds: session.durationSeconds,
-                                ),
-                                isHistory: true,
-                                historicalTimeline: decodedTimeline,
-                                terminationReason: session.terminationReason,
-                              );
-                            },
-                          ),
-                        );
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerHighest.withAlpha(
-                            50,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withAlpha(15)),
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16.0),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withAlpha(
+                          60,
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: colorScheme.secondary.withAlpha(30),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.bolt_rounded,
-                                color: colorScheme.secondary,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    dateStr,
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withAlpha(15)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) {
+                                      List<Map<String, dynamic>>
+                                      decodedTimeline = [];
+                                      try {
+                                        decodedTimeline =
+                                            (jsonDecode(session.hrTimelineJson)
+                                                    as List<dynamic>)
+                                                .map(
+                                                  (e) =>
+                                                      Map<String, dynamic>.from(
+                                                        e as Map,
+                                                      ),
+                                                )
+                                                .toList();
+                                      } catch (_) {}
+                                      return SessionReportPage(
+                                        duration: Duration(
+                                          seconds: session.durationSeconds,
+                                        ),
+                                        isHistory: true,
+                                        historicalTimeline: decodedTimeline,
+                                        terminationReason:
+                                            session.terminationReason,
+                                      );
+                                    },
                                   ),
-                                  const SizedBox(height: 4),
-                                  // Abbiamo sostituito l'RPE con la ragione della chiusura!
-                                  Text(
-                                    session.terminationReason,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: reasonColor,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.0,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              "${durationMins}m",
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline_rounded,
-                                color: colorScheme.error.withAlpha(180),
-                              ),
-                              onPressed: () {
-                                analytics.deleteSession(session);
+                                );
                               },
+                              highlightColor: reasonColor.withAlpha(20),
+                              splashColor: reasonColor.withAlpha(30),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    // ICONA SEMANTICA
+                                    Container(
+                                      padding: const EdgeInsets.all(14),
+                                      decoration: BoxDecoration(
+                                        color: reasonColor.withAlpha(30),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        reasonIcon,
+                                        color: reasonColor,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+
+                                    // DETTAGLI E BADGE MINUTI (LAYOUT PULITO)
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                dateStr,
+                                                style: theme
+                                                    .textTheme
+                                                    .titleSmall
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.white,
+                                                    ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              // BADGE DELLA DURATA
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withAlpha(
+                                                    20,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child: Text(
+                                                  "${durationMins}m",
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            session.terminationReason,
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                                  color: reasonColor,
+                                                  fontWeight: FontWeight.bold,
+                                                  letterSpacing: 1.0,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    // CESTINO ISOLATO
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline_rounded,
+                                        size: 22,
+                                      ),
+                                      color: Colors.white.withAlpha(
+                                        70,
+                                      ), // Reso più neutro
+                                      onPressed: () =>
+                                          analytics.deleteSession(session),
+                                      tooltip: 'Delete session',
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     );

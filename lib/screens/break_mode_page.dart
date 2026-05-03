@@ -45,13 +45,11 @@ class _BreakModePageState extends State<BreakModePage>
   void _checkAutoRoute() {
     if (_isNavigating || !mounted) return;
 
-    // 1. Check for Neural Fatigue Kick-out
     if (_engineRef.advisoryMessage.contains('Maximum break reached')) {
       _isNavigating = true;
       HapticFeedback.heavyImpact();
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
-      _engineRef.endSession('NEURAL FATIGUE'); // FIX: Forza la motivazione
-
+      _engineRef.endSession('NEURAL FATIGUE');
       Navigator.of(context).pushReplacement(
         PremiumPageRoute(
           page: SessionReportPage(
@@ -63,12 +61,10 @@ class _BreakModePageState extends State<BreakModePage>
       return;
     }
 
-    // 2. Check for Global Session Ended (e.g., Daily Limit reached during break)
     if (_engineRef.currentState == EngineState.sessionEnded) {
       _isNavigating = true;
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
       final reason = _engineRef.terminationReason;
-
       Navigator.of(context).pushReplacement(
         PremiumPageRoute(
           page: SessionReportPage(
@@ -96,6 +92,8 @@ class _BreakModePageState extends State<BreakModePage>
     final bool isExtended = engine.hasIncompleteRecovery;
     final bool canResume = engine.isFocusRecommended;
 
+    // NUOVA SEMANTICA: La pausa è Azzurra (Calma/Tono Vagale).
+    // L'Ambra subentra solo se il recupero è incompleto (Fatica).
     final Color ambientColor = isExtended
         ? colorScheme.secondary
         : colorScheme.tertiary;
@@ -106,27 +104,30 @@ class _BreakModePageState extends State<BreakModePage>
         backgroundColor: colorScheme.surface,
         body: Stack(
           children: [
-            // --- AMBIENT GLOW ---
-            Positioned.fill(
+            // --- ALLINEAMENTO UI: Glow in alto a destra come nella Home ---
+            Positioned(
+              top: -150,
+              right: -100,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 1200),
+                width: 500,
+                height: 500,
                 decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      ambientColor.withAlpha(isExtended ? 25 : 15),
+                      ambientColor.withAlpha(isExtended ? 45 : 30),
                       Colors.transparent,
                     ],
-                    radius: 1.2,
+                    stops: const [0.2, 1.0],
                   ),
                 ),
               ),
             ),
 
-            // --- FOREGROUND ---
             SafeArea(
               child: Column(
                 children: [
-                  // 1. TOP STATUS BAR
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24.0,
@@ -154,7 +155,7 @@ class _BreakModePageState extends State<BreakModePage>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'NEURAL RECOVERY',
+                            isExtended ? 'FATIGUE WARNING' : 'NEURAL RECOVERY',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: ambientColor,
                               fontWeight: FontWeight.bold,
@@ -166,7 +167,6 @@ class _BreakModePageState extends State<BreakModePage>
                     ),
                   ),
 
-                  // 2. CENTRAL TECH-BREATHING RING
                   Expanded(
                     child: Center(
                       child: AnimatedBuilder(
@@ -246,7 +246,6 @@ class _BreakModePageState extends State<BreakModePage>
                     ),
                   ),
 
-                  // 3. ADVISORY & WARNINGS
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32.0),
                     child: Column(
@@ -322,12 +321,10 @@ class _BreakModePageState extends State<BreakModePage>
                     ),
                   ),
 
-                  // 4. ACTION CONTROLS
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
                     child: Row(
                       children: [
-                        // Early End Session
                         Expanded(
                           child: GestureDetector(
                             onTap: () {
@@ -350,14 +347,10 @@ class _BreakModePageState extends State<BreakModePage>
                               if (_isNavigating) return;
                               _isNavigating = true;
                               HapticFeedback.heavyImpact();
-
                               final duration = Duration(
                                 seconds: engine.sessionTotalFocusSeconds,
                               );
-                              engine.endSession(
-                                'MANUAL END',
-                              ); // FIX: Forza la motivazione
-
+                              engine.endSession('MANUAL END');
                               Navigator.of(context).pushReplacement(
                                 PremiumPageRoute(
                                   page: SessionReportPage(
@@ -402,7 +395,6 @@ class _BreakModePageState extends State<BreakModePage>
                         ),
                         const SizedBox(width: 16),
 
-                        // Resume Focus
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: canResume

@@ -3,15 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../providers/analytics_provider.dart';
 import '../../providers/clock_provider.dart';
 import '../../providers/safte_provider.dart';
 import '../../providers/cognitive_engine_provider.dart';
 import '../../utils/dashboard_helpers.dart';
-
 import '../profile_page.dart';
 import '../focus_mode_page.dart';
 
-/// Main Dashboard view combining real-time biological data and the entry point for deep work.
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
@@ -38,7 +37,8 @@ class HomeTab extends StatelessWidget {
                   },
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 140),
+                  // Padding allungato per far spazio al nuovo modulo del traguardo giornaliero
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 180),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       const _ReadinessCard(),
@@ -68,6 +68,7 @@ class _ReadinessCard extends StatelessWidget {
 
     final double rawScore = safte.getStateAt(clock.currentTime).effectiveness;
     final double score = rawScore.floorToDouble();
+
     final dynamicColor = SafteSemanticInterpreter.getEffectivenessColor(
       score,
       theme.colorScheme,
@@ -96,7 +97,6 @@ class _ReadinessCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'COGNITIVE READINESS',
-                // Uses labelMedium from theme (already bold and letterSpaced)
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: dynamicColor,
                 ),
@@ -219,7 +219,7 @@ class _KeyFactorsSection extends StatelessWidget {
           statusLabel: SafteSemanticInterpreter.getCircadianStatus(
             currentState.circadianValue,
           ),
-          statusColor: theme.colorScheme.tertiary,
+          statusColor: theme.colorScheme.tertiary, // Azzurro: Costante naturale
         ),
         const SizedBox(height: 12),
         _ContributorTile(
@@ -230,6 +230,8 @@ class _KeyFactorsSection extends StatelessWidget {
             safte.wakeupTime,
             clock.currentTime,
           ),
+          // Semantica applicata: L'inerzia del sonno è un "danno" passeggero, quindi Ambra.
+          // Se "Cleared", potrebbe diventare un grigio neutro o mantenere il tema.
           statusColor: theme.colorScheme.secondary,
         ),
       ],
@@ -255,7 +257,6 @@ class _ContributorTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -327,6 +328,7 @@ class _FloatingStartButton extends StatelessWidget {
     final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
     final engine = context.watch<CognitiveEngineProvider>();
+    final analytics = context.watch<AnalyticsProvider>();
 
     final double currentScore = safte
         .getStateAt(clock.currentTime)
@@ -335,29 +337,32 @@ class _FloatingStartButton extends StatelessWidget {
         currentScore >= SafteSemanticInterpreter.warningThreshold;
     final bool isLimitReached = engine.isDailyLimitReached;
 
-    // --- GESTIONE DEI 3 STATI VISIVI ---
-    final Color buttonColor = isLimitReached || !isEngineReady
-        ? theme.colorScheme.surfaceContainerHighest
-        : theme.colorScheme.primary;
-
-    final Color textColor = isLimitReached
-        ? theme.colorScheme.error
-        : (isEngineReady
-              ? theme.colorScheme.onPrimary
-              : theme.colorScheme.secondary);
-
+    Color buttonColor;
+    Color textColor;
     String buttonText;
     IconData buttonIcon;
+
     if (isLimitReached) {
-      buttonText = 'LIMIT REACHED (4H)';
-      buttonIcon = Icons.lock_clock_rounded;
+      buttonColor = theme.colorScheme.tertiary.withAlpha(40);
+      textColor = theme.colorScheme.tertiary;
+      buttonText = 'LIMIT REACHED';
+      buttonIcon = Icons.military_tech_rounded;
     } else if (!isEngineReady) {
+      buttonColor = theme.colorScheme.surfaceContainerHighest;
+      textColor = theme.colorScheme.secondary;
       buttonText = 'READINESS TOO LOW';
       buttonIcon = Icons.battery_alert_rounded;
     } else {
+      buttonColor = theme.colorScheme.primary;
+      textColor = theme.colorScheme.onPrimary;
       buttonText = 'START SESSION';
       buttonIcon = Icons.power_settings_new_rounded;
     }
+
+    // Calcolo del progresso giornaliero
+    final int workedMinutes = analytics.dailyWorkedSeconds ~/ 60;
+    const int maxMinutes = 240; // 4 ore
+    final double progress = (workedMinutes / maxMinutes).clamp(0.0, 1.0);
 
     return Positioned(
       bottom: 0,
@@ -373,75 +378,126 @@ class _FloatingStartButton extends StatelessWidget {
               theme.colorScheme.surface.withAlpha(240),
               theme.colorScheme.surface,
             ],
-            stops: const [0.0, 0.4, 1.0],
+            stops: const [0.0, 0.3, 1.0],
           ),
         ),
         padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: buttonColor,
-            foregroundColor: textColor,
-            elevation: (isEngineReady && !isLimitReached) ? 8 : 0,
-            shadowColor: theme.colorScheme.primary.withAlpha(100),
-          ),
-          onPressed: () {
-            // 1. Blocco per Limite Giornaliero Superato
-            if (isLimitReached) {
-              HapticFeedback.heavyImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  content: Text(
-                    'Clinical limit of 4 hours reached. Prolonged focus beyond this point degrades neural pathways.',
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- DAILY PROGRESS MODULE ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'DAILY DEEP WORK',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  Text(
+                    '${workedMinutes}m / 4h',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isLimitReached
+                          ? theme.colorScheme.tertiary
+                          : Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              );
-              return;
-            }
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 4,
+                backgroundColor: Colors.white.withAlpha(15),
+                color: isLimitReached
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 24),
 
-            // 2. Blocco per Prontezza Cognitiva Insufficiente
-            if (!isEngineReady) {
-              HapticFeedback.selectionClick();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  content: Text(
-                    'Cognitive readiness too low. Wait for your biological battery to recharge before starting a new session.',
-                    style: TextStyle(
-                      color: theme.colorScheme.secondary,
-                      fontWeight: FontWeight.bold,
-                    ),
+            // --- MAIN ACTION BUTTON ---
+            SizedBox(
+              width: double.infinity,
+              height: 64,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: buttonColor,
+                  foregroundColor: textColor,
+                  elevation: (isEngineReady && !isLimitReached) ? 8 : 0,
+                  shadowColor: theme.colorScheme.primary.withAlpha(100),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
                   ),
                 ),
-              );
-              return;
-            }
+                onPressed: () {
+                  if (isLimitReached) {
+                    HapticFeedback.heavyImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        content: Text(
+                          'Clinical limit of 4 hours reached. Prolonged focus beyond this point degrades neural pathways.',
+                          style: TextStyle(
+                            color: theme.colorScheme.tertiary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
 
-            // 3. Avvio Normale Sessione
-            HapticFeedback.heavyImpact();
-            engine.startSession();
-            Navigator.of(
-              context,
-            ).push(PremiumPageRoute(page: const FocusModePage()));
-          },
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(buttonIcon),
-              const SizedBox(width: 12),
-              Text(
-                buttonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+                  if (!isEngineReady) {
+                    HapticFeedback.selectionClick();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        content: Text(
+                          'Cognitive readiness too low. Wait for your biological battery to recharge before starting a new session.',
+                          style: TextStyle(
+                            color: theme.colorScheme.secondary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  HapticFeedback.heavyImpact();
+                  engine.startSession();
+                  Navigator.of(
+                    context,
+                  ).push(PremiumPageRoute(page: const FocusModePage()));
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(buttonIcon),
+                    const SizedBox(width: 12),
+                    Text(
+                      buttonText,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

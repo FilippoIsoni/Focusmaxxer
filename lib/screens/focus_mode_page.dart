@@ -37,18 +37,15 @@ class _FocusModePageState extends State<FocusModePage> {
 
     if (_engineListener!.currentState == EngineState.sessionEnded) {
       _engineListener!.removeListener(_onStateChange);
-
       final fakeElapsed = Duration(
         seconds: _engineListener!.sessionTotalFocusSeconds,
       );
-      final reason =
-          _engineListener!.terminationReason; // FIX: Estrazione della ragione
-
+      final reason = _engineListener!.terminationReason;
       Navigator.of(context).pushReplacement(
         PremiumPageRoute(
           page: SessionReportPage(
             duration: fakeElapsed,
-            terminationReason: reason, // FIX: Passaggio della ragione
+            terminationReason: reason,
           ),
         ),
       );
@@ -68,29 +65,32 @@ class _FocusModePageState extends State<FocusModePage> {
         backgroundColor: colorScheme.surface,
         body: Stack(
           children: [
-            // --- AMBIENT GLOW ---
-            Positioned.fill(
+            // --- ALLINEAMENTO UI: Glow in alto a destra ---
+            Positioned(
+              top: -150,
+              right: -100,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 800),
+                width: 500,
+                height: 500,
                 decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
                       isCalibration
-                          ? colorScheme.error.withAlpha(20)
-                          : colorScheme.primary.withAlpha(20),
+                          ? colorScheme.tertiary.withAlpha(45)
+                          : colorScheme.primary.withAlpha(45),
                       Colors.transparent,
                     ],
-                    radius: 1.2,
+                    stops: const [0.2, 1.0],
                   ),
                 ),
               ),
             ),
 
-            // --- FOREGROUND CONTENT ---
             SafeArea(
               child: Column(
                 children: [
-                  // 1. TOP STATUS BAR (Glassmorphism)
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24.0,
@@ -118,7 +118,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                     ? Icons.science_rounded
                                     : Icons.bolt_rounded,
                                 color: isCalibration
-                                    ? colorScheme.error
+                                    ? colorScheme.tertiary
                                     : colorScheme.primary,
                                 size: 16,
                               ),
@@ -127,7 +127,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                 isCalibration ? 'CALIBRATING' : 'DEEP WORK',
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: isCalibration
-                                      ? colorScheme.error
+                                      ? colorScheme.tertiary
                                       : colorScheme.primary,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.5,
@@ -157,7 +157,6 @@ class _FocusModePageState extends State<FocusModePage> {
                     ),
                   ),
 
-                  // 2. CENTRAL MODULE
                   Expanded(
                     child: Center(
                       child: Column(
@@ -171,7 +170,6 @@ class _FocusModePageState extends State<FocusModePage> {
                           const SizedBox(height: 48),
                           const _SessionTimerDisplay(),
 
-                          // Advisory Message
                           AnimatedOpacity(
                             duration: const Duration(milliseconds: 500),
                             opacity:
@@ -186,16 +184,16 @@ class _FocusModePageState extends State<FocusModePage> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: colorScheme.error.withAlpha(20),
+                                color: colorScheme.secondary.withAlpha(20),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: colorScheme.error.withAlpha(60),
+                                  color: colorScheme.secondary.withAlpha(60),
                                 ),
                               ),
                               child: Text(
                                 engine.advisoryMessage.toUpperCase(),
                                 style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.error,
+                                  color: colorScheme.secondary,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 1.0,
                                 ),
@@ -207,12 +205,10 @@ class _FocusModePageState extends State<FocusModePage> {
                     ),
                   ),
 
-                  // 3. ACTION CONTROLS
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
                     child: Row(
                       children: [
-                        // Break Button
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: engine.isAfkWarningActive
@@ -224,7 +220,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                         context,
                                       ).showSnackBar(
                                         SnackBar(
-                                          backgroundColor: colorScheme.error,
+                                          backgroundColor: colorScheme.tertiary,
                                           content: const Text(
                                             'Cannot pause during calibration.',
                                             style: TextStyle(
@@ -279,7 +275,6 @@ class _FocusModePageState extends State<FocusModePage> {
                         ),
                         const SizedBox(width: 16),
 
-                        // Abort/End Button
                         Expanded(
                           child: GestureDetector(
                             onTap: engine.isAfkWarningActive
@@ -314,7 +309,6 @@ class _FocusModePageState extends State<FocusModePage> {
                                           .abortCalibrationSession();
                                       Navigator.of(context).pop();
                                     } else {
-                                      // Implicitly calls endSession('MANUAL END') via default param
                                       context
                                           .read<CognitiveEngineProvider>()
                                           .endSession();
@@ -323,15 +317,11 @@ class _FocusModePageState extends State<FocusModePage> {
                             child: Container(
                               height: 64,
                               decoration: BoxDecoration(
-                                color: isCalibration
-                                    ? colorScheme.error.withAlpha(15)
-                                    : colorScheme.surfaceContainerHighest
-                                          .withAlpha(80),
+                                color: colorScheme.surfaceContainerHighest
+                                    .withAlpha(80),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isCalibration
-                                      ? colorScheme.error.withAlpha(30)
-                                      : Colors.white.withAlpha(15),
+                                  color: Colors.white.withAlpha(15),
                                 ),
                               ),
                               child: Row(
@@ -342,17 +332,13 @@ class _FocusModePageState extends State<FocusModePage> {
                                         ? Icons.close_rounded
                                         : Icons.stop_rounded,
                                     size: 18,
-                                    color: isCalibration
-                                        ? colorScheme.error.withAlpha(220)
-                                        : colorScheme.onSurfaceVariant,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     isCalibration ? "ABORT" : "END",
                                     style: TextStyle(
-                                      color: isCalibration
-                                          ? colorScheme.error.withAlpha(220)
-                                          : colorScheme.onSurfaceVariant,
+                                      color: colorScheme.onSurfaceVariant,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 1.5,
@@ -381,13 +367,9 @@ class _FocusModePageState extends State<FocusModePage> {
   }
 }
 
-// ==========================================
-// PRIVATE OVERLAYS & COMPONENTS
-// ==========================================
-
+// ... Overlays private identici a prima ...
 class _CalibrationAnomalyOverlay extends StatelessWidget {
   const _CalibrationAnomalyOverlay();
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -487,7 +469,6 @@ class _CalibrationAnomalyOverlay extends StatelessWidget {
 
 class _AfkWarningOverlay extends StatelessWidget {
   const _AfkWarningOverlay();
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -562,7 +543,6 @@ class _AfkWarningOverlay extends StatelessWidget {
 
 class _SessionTimerDisplay extends StatelessWidget {
   const _SessionTimerDisplay();
-
   String _formatDuration(int totalSeconds) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
     String minutes = twoDigits((totalSeconds ~/ 60) % 60);
