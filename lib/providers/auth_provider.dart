@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Aggiunto per la memoria
+import '../services/impact_api_service.dart';
 
 enum AuthStatus { unknown, firstTime, unauthenticated, authenticated }
 
@@ -45,13 +46,15 @@ class AuthProvider extends ChangeNotifier {
 
   // 3. SCRIVE in memoria che l'utente ha fatto il login
   Future<void> login(String username, String password) async {
-    await Future.delayed(const Duration(milliseconds: 1500));
-    if (username == 'admin' && password == '123') {
+    final impactService = ImpactApiService();
+    final statusCode = await impactService.getAndStoreTokens(username, password);
+
+    if (statusCode == 200) {
       await prefs.setBool('isLoggedIn', true);  
       status = AuthStatus.authenticated;
       notifyListeners();
     } else {
-      throw Exception('Credenziali errate');
+      throw Exception('Credenziali errate (HTTP $statusCode)');
     }
   }
 
