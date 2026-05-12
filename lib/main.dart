@@ -55,11 +55,23 @@ class FocusMaxxerApp extends StatelessWidget {
       providers: [
         // 1. Data Layer & Network Layer
         Provider<SessionRepository>(create: (_) => SessionRepository(database)),
-        Provider<ImpactApiService>(create: (_) => ImpactApiService()),
         Provider<DeviceHardwareService>(create: (_) => DeviceHardwareService()),
 
         // 2. Base State Providers
         ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
+        
+        // ImpactApiService depends on AuthProvider for the logout callback
+        ProxyProvider<AuthProvider, ImpactApiService>(
+          create: (context) => ImpactApiService(),
+          update: (context, auth, previous) {
+            previous ??= ImpactApiService();
+            previous.onSessionExpired = () {
+              auth.logout();
+            };
+            return previous;
+          },
+        ),
+
         ChangeNotifierProvider(create: (_) => SafteProvider(prefs)),
         ChangeNotifierProvider(
           create: (_) =>

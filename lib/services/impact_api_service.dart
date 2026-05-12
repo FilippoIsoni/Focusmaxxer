@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/daily_baseline.dart';
 
 class ImpactApiService {
+  Function()? onSessionExpired;
+
   Future<DailyBaseline> fetchMorningBaseline() async {
     // Simula ritardo di rete
     await Future.delayed(const Duration(milliseconds: 500));
@@ -83,4 +86,54 @@ class ImpactApiService {
     //Just return the status code
     return response.statusCode;
   } //_getAndStoreTokens
+
+  /// Wrapper per chiamate autenticate (GET) che gestisce in automatico
+  /// l'errore 401 e il refresh dei token (sia in modo preventivo che reattivo).
+  Future<http.Response> requestProtectedGet(String endpoint) async {
+    final sp = await SharedPreferences.getInstance();
+    String? accessToken = sp.getString('access');
+
+    // 1. Controllo preventivo: se non c'è token o è scaduto localmente, facciamo subito il refresh
+    if (accessToken == null || JwtDecoder.isExpired(accessToken)) {
+      final refreshStatus = await refreshTokens();
+      if (refreshStatus == 200) {
+        accessToken = sp.getString('access');
+      } else {
+        // Se il refresh fallisce (es. scaduto anche quello), forziamo il logout
+        if (onSessionExpired != null) {
+          onSessionExpired!();
+        }
+        throw Exception('SessionExpired');
+      }
+    }
+
+    final url = Uri.parse(ImpactApiService.baseUrl + endpoint);
+    
+    // Tentativo con l'access token valido (secondo la scadenza locale)
+    var response = await http.get(url, headers: {
+      'Authorization': 'Bearer $accessToken',
+    });
+
+    // 2. Controllo reattivo: se il server risponde 401 per altri motivi 
+    // (es. token revocato dal server o scaduto nel millisecondo prima della richiesta)
+    if (response.statusCode == 401) {
+      final refreshStatus = await refreshTokens();
+      
+      if (refreshStatus == 200) {
+        // Refresh andato a buon fine, ritentiamo
+        accessToken = sp.getString('access');
+        response = await http.get(url, headers: {
+          'Authorization': 'Bearer $accessToken',
+        });
+      } else {
+        // Definitivamente scaduto
+        if (onSessionExpired != null) {
+          onSessionExpired!();
+        }
+        throw Exception('SessionExpired');
+      }
+    }
+
+    return response;
+  }
 }
