@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Aggiunto per la memoria
+import 'package:jwt_decoder/jwt_decoder.dart';
 import '../services/impact_api_service.dart';
 
 enum AuthStatus { unknown, firstTime, unauthenticated, authenticated }
@@ -22,6 +23,16 @@ class AuthProvider extends ChangeNotifier {
     // Controlliamo i dati salvati. Se non ci sono, usiamo i default (true per il primo avvio)
     bool isFirstTime = prefs.getBool('isFirstTime') ?? true;
     bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+    // Controllo preventivo: se il refresh token è scaduto, disconnettiamo l'utente
+    if (isLoggedIn) {
+      final String? refreshToken = prefs.getString('refresh');
+      if (refreshToken == null || JwtDecoder.isExpired(refreshToken)) {
+        isLoggedIn = false;
+        prefs.setBool('isLoggedIn', false);
+      }
+    }
+
     // Leggiamo anche i dati del profilo, se esistono
     name = prefs.getString('profile_name') ?? '';
     surname = prefs.getString('profile_surname') ?? '';

@@ -8,30 +8,55 @@ import '../models/daily_baseline.dart';
 class ImpactApiService {
   Function()? onSessionExpired;
 
+  /// Recupera i dati del sonno di 2 giorni fa e costruisce l'oggetto DailyBaseline.
   Future<DailyBaseline> fetchMorningBaseline() async {
-    // Simula ritardo di rete
-    await Future.delayed(const Duration(milliseconds: 500));
+    const patientUsername = 'Jpefaq6m58'; 
+    
+    // 1. Calcoliamo la data (2 giorni fa, come richiesto dal prof)
+    final twoDaysAgo = DateTime.now().subtract(const Duration(days: 2));
+    final String dateString = "${twoDaysAgo.year}-${twoDaysAgo.month.toString().padLeft(2, '0')}-${twoDaysAgo.day.toString().padLeft(2, '0')}";
+    
+    // 2. Costruiamo l'endpoint ed eseguiamo la richiesta
+    final endpoint = 'data/v1/sleep/patients/$patientUsername/day/$dateString/';
+    final response = await requestProtectedGet(endpoint);
 
-    final mockJson = {
-      "dateOfSleep": DateTime.now().toIso8601String().substring(0, 10),
-      "startTime": DateTime.now()
-          .subtract(const Duration(hours: 4, minutes: 30))
-          .toIso8601String(),
-      "endTime": DateTime.now()
-          .subtract(const Duration(minutes: 10))
-          .toIso8601String(),
-      "duration": 2.832E+7,
-      "minutesToFallAsleep": 0,
-      "minutesAsleep": 429, // Real data key
-      "minutesAwake": 43,
-      "minutesAfterWakeup": 3,
-      "timeInBed": 472,
-      "efficiency": 96, // Real data key
-      "logType": "auto_detected",
+    if (response.statusCode != 200) {
+      throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
+    }
+
+    // 3. Estrazione lineare e sicura gestendo la struttura annidata
+    final decodedResponse = jsonDecode(response.body);
+    final dataNode = decodedResponse['data'];
+    Map<String, dynamic>? sessionData;
+
+    if (dataNode is Map<String, dynamic>) {
+      final list = dataNode['data'];
+      if (list is List && list.isNotEmpty) {
+        sessionData = list.first;
+      }
+    } else if (dataNode is List && dataNode.isNotEmpty) {
+      final firstDay = dataNode.first;
+      if (firstDay is Map<String, dynamic>) {
+        final list = firstDay['data'];
+        if (list is List && list.isNotEmpty) {
+          sessionData = list.first;
+        } else if (firstDay.containsKey('efficiency')) {
+          sessionData = firstDay;
+        }
+      }
+    }
+
+    // Se non troviamo i dati reali (es. giorno senza dati), usiamo un fallback di mockup
+    return sessionData != null ? DailyBaseline.fromJson(sessionData) : _getMockBaseline();
+  }
+
+  DailyBaseline _getMockBaseline() {
+    return DailyBaseline.fromJson({
+      "efficiency": 96,
+      "startTime": DateTime.now().subtract(const Duration(hours: 4)).toIso8601String(),
+      "endTime": DateTime.now().toIso8601String(),
       "mainSleep": true,
-    };
-
-    return DailyBaseline.fromJson(mockJson);
+    });
   }
 
   static String baseUrl = 'https://impact.dei.unipd.it/bwthw/';
@@ -39,53 +64,43 @@ class ImpactApiService {
   static String tokenEndpoint = 'gate/v1/token/';
   static String refreshEndpoint = 'gate/v1/refresh/';
 
-  //This method allows to refresh the stored JWT in SharedPreferences
+  /// Esegue il refresh dei token JWT memorizzati in SharedPreferences.
   Future<int> refreshTokens() async {
-    //Create the request
     final url = ImpactApiService.baseUrl + ImpactApiService.refreshEndpoint;
     final sp = await SharedPreferences.getInstance();
     final refresh = sp.getString('refresh');
-    if (refresh != null) {
-      final body = {'refresh': refresh};
+    
+    if (refresh == null) return 401;
 
-      //Get the response
-      print('Calling: $url');
-      final response = await http.post(Uri.parse(url), body: body);
+    final response = await http.post(Uri.parse(url), body: {'refresh': refresh});
 
-      //If the response is OK, set the tokens in SharedPreferences to the new values
-      if (response.statusCode == 200) {
-        final decodedResponse = jsonDecode(response.body);
-        final sp = await SharedPreferences.getInstance();
-        await sp.setString('access', decodedResponse['access']);
-        await sp.setString('refresh', decodedResponse['refresh']);
-      } //if
-
-      //Just return the status code
-      return response.statusCode;
+    if (response.statusCode == 200) {
+      final decodedResponse = jsonDecode(response.body);
+      await sp.setString('access', decodedResponse['access']);
+      await sp.setString('refresh', decodedResponse['refresh']);
     }
-    return 401;
-  } //_refreshTokens
 
+    return response.statusCode;
+  }
+
+  /// Ottiene ed archivia i token JWT a partire da username e password.
   Future<int> getAndStoreTokens(String username, String password) async {
-    //Create the request
     final url = ImpactApiService.baseUrl + ImpactApiService.tokenEndpoint;
-    final body = {'username': username, 'password': password};
+    
+    final response = await http.post(Uri.parse(url), body: {
+      'username': username,
+      'password': password,
+    });
 
-    //Get the response
-    print('Calling: $url');
-    final response = await http.post(Uri.parse(url), body: body);
-
-    //If response is OK, decode it and store the tokens. Otherwise do nothing.
     if (response.statusCode == 200) {
       final decodedResponse = jsonDecode(response.body);
       final sp = await SharedPreferences.getInstance();
       await sp.setString('access', decodedResponse['access']);
       await sp.setString('refresh', decodedResponse['refresh']);
-    } //if
+    }
 
-    //Just return the status code
     return response.statusCode;
-  } //_getAndStoreTokens
+  }
 
   /// Wrapper per chiamate autenticate (GET) che gestisce in automatico
   /// l'errore 401 e il refresh dei token (sia in modo preventivo che reattivo).

@@ -14,13 +14,21 @@ class DailyBaseline {
   factory DailyBaseline.fromJson(Map<String, dynamic> json) {
     return DailyBaseline(
       sleepEfficiency: (json['efficiency'] as num?)?.toDouble() ?? 85.0,
-      bedTime:
-          DateTime.tryParse(json['startTime']?.toString() ?? '') ??
-          DateTime.now().subtract(const Duration(hours: 10)),
-      wakeupTime:
-          DateTime.tryParse(json['endTime']?.toString() ?? '') ??
-          DateTime.now().subtract(const Duration(hours: 2)),
+      bedTime: _parseDate(json['startTime']?.toString(), 10),
+      wakeupTime: _parseDate(json['endTime']?.toString(), 2),
       mainSleep: json['mainSleep'] as bool? ?? true,
     );
+  }
+
+  /// Converte la data stringa in DateTime aggiungendo l'anno se mancante.
+  static DateTime _parseDate(String? raw, int fallbackHoursAgo) {
+    final fallback = DateTime.now().subtract(Duration(hours: fallbackHoursAgo));
+    
+    if (raw == null || raw.isEmpty) return fallback;
+
+    // Se la stringa inizia con mese-giorno (es. "02-13"), aggiungiamo l'anno corrente
+    final dateStr = raw.startsWith(RegExp(r'^\d{2}-\d{2}')) ? '${DateTime.now().year}-$raw' : raw;
+
+    return DateTime.tryParse(dateStr) ?? fallback;
   }
 }
