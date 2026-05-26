@@ -540,7 +540,9 @@ class CognitiveEngineProvider extends ChangeNotifier
   void _calculateNextSegmentDuration() {
     final targets = SessionRulesEngine.calculateNextSegment(
       currentState: safteSnapshot,
-      internalClock: _internalClock,
+      // Shiftiamo l'orologio nel frame temporale dei dati del server (stessa finestra di wakeupTime)
+      // in modo che le proiezioni future siano coerenti con l'ancora biologica.
+      internalClock: _internalClock.subtract(SafteProvider.serverLag),
       baselineReservoir: safteProvider.baselineReservoir,
       wakeupTime: safteProvider.wakeupTime,
       accumulatedDailySeconds:

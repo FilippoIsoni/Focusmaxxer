@@ -20,9 +20,10 @@ class SafteProvider extends ChangeNotifier {
   // GETTERS PER L'ESTERNO
   // ==========================================
 
-  /// Ritorna l'ora di risveglio. Fallback a 2 ore fa solo per UI temporanea al primo avvio.
+  /// Ritorna l'ora di risveglio nel frame temporale dei dati reali (server lag incluso).
+  /// Fallback coerente: 2 ore fa nel frame dei dati (= serverLag + 2h fa nel tempo reale).
   DateTime get wakeupTime =>
-      _tWake ?? DateTime.now().subtract(const Duration(hours: 2));
+      _tWake ?? DateTime.now().subtract(serverLag + const Duration(hours: 2));
 
   /// [FIX CRITICO]: Getter sicuro che garantisce sempre un double non-nullo.
   /// Risolve l'errore di compilazione nel CognitiveEngineProvider.
@@ -52,6 +53,10 @@ class SafteProvider extends ChangeNotifier {
   // ELABORAZIONE DEI DATI DEL WEARABLE
   // ==========================================
 
+  /// Lag strutturale del server: i dati disponibili sono sempre di N giorni fa.
+  /// Pubblico per permettere ad altri componenti (es. CognitiveEngineProvider) di allinearsi.
+  static const Duration serverLag = Duration(days: 2);
+
   /// Da chiamare DOPO aver scaricato i dati dell'indossabile.
   /// Ritorna TRUE *solo* se è un sonno principale (Nuovo Giorno).
   Future<bool> syncWithServer({
@@ -63,6 +68,7 @@ class SafteProvider extends ChangeNotifier {
     // Evita ricalcoli ridondanti se i dati sono identici a quelli in memoria
     if (_tWake == sWake && _tSleep == sSleep) return false;
 
+    // I timestamp rimangono reali (es. 22 maggio 08:59), senza modifiche artificiali.
     final serverBaseline = DailyBaseline(
       sleepEfficiency: sEff,
       bedTime: sSleep,
@@ -78,7 +84,7 @@ class SafteProvider extends ChangeNotifier {
       currentSleep: serverBaseline,
     );
 
-    // Aggiorna le ancore temporali
+    // Aggiorna le ancore temporali con i valori reali
     _tWake = sWake;
     _tSleep = sSleep;
 
@@ -95,12 +101,13 @@ class SafteProvider extends ChangeNotifier {
   // ==========================================
 
   /// Calcola lo stato matematico puro in base all'orario fornito.
-  /// Usato per la UI in tempo reale o per il calcolo dei segmenti futuri.
+  /// Porta il targetTime indietro di [serverLag] per allinearlo alla finestra
+  /// temporale dei dati reali scaricati dal server, evitando assunzioni sui timestamp.
   SafteState getStateAt(DateTime targetTime) {
     return SafteEngine.computeStateAt(
-      reservoirAtWakeup: baselineReservoir, // Usa il getter sicuro non-nullo
+      reservoirAtWakeup: baselineReservoir,
       wakeupTime: wakeupTime,
-      targetTime: targetTime,
+      targetTime: targetTime.subtract(serverLag),
     );
   }
 

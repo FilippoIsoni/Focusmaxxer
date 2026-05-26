@@ -24,27 +24,9 @@ class ImpactApiService {
       throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
     }
 
-    // 3. Estrazione lineare e sicura gestendo la struttura annidata
+    // 3. Struttura reale: { "data": { "date": "...", "data": { ...sessione... } } }
     final decodedResponse = jsonDecode(response.body);
-    final dataNode = decodedResponse['data'];
-    Map<String, dynamic>? sessionData;
-
-    if (dataNode is Map<String, dynamic>) {
-      final list = dataNode['data'];
-      if (list is List && list.isNotEmpty) {
-        sessionData = list.first;
-      }
-    } else if (dataNode is List && dataNode.isNotEmpty) {
-      final firstDay = dataNode.first;
-      if (firstDay is Map<String, dynamic>) {
-        final list = firstDay['data'];
-        if (list is List && list.isNotEmpty) {
-          sessionData = list.first;
-        } else if (firstDay.containsKey('efficiency')) {
-          sessionData = firstDay;
-        }
-      }
-    }
+    final sessionData = decodedResponse['data']['data'] as Map<String, dynamic>?;
 
     // Se non troviamo i dati reali (es. giorno senza dati), usiamo un fallback di mockup
     return sessionData != null ? DailyBaseline.fromJson(sessionData) : _getMockBaseline();
