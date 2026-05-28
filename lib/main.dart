@@ -33,7 +33,7 @@ void main() async {
 
   // Initialize Floor relational database
   final database = await $FloorAppDatabase
-      .databaseBuilder('app_database_v2.db')
+      .databaseBuilder('app_database_v3.db') // FIX: Bypass Android Auto Backup
       .build();
 
   runApp(FocusMaxxerApp(prefs: prefs, database: database));
