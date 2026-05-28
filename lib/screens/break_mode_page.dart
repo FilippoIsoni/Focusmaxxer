@@ -49,16 +49,18 @@ class _BreakModePageState extends State<BreakModePage>
       _isNavigating = true;
       HapticFeedback.heavyImpact();
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
-      _engineRef.endSession('NEURAL FATIGUE');
-      // FIX COERENZA: ImmersiveRoute
-      Navigator.of(context).pushReplacement(
-        ImmersiveRoute(
-          page: SessionReportPage(
-            duration: duration,
-            terminationReason: 'NEURAL FATIGUE',
+      // Await endSession so the DB write completes before we navigate away.
+      _engineRef.endSession('NEURAL FATIGUE').then((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          ImmersiveRoute(
+            page: SessionReportPage(
+              duration: duration,
+              terminationReason: 'NEURAL FATIGUE',
+            ),
           ),
-        ),
-      );
+        );
+      });
       return;
     }
 
@@ -339,15 +341,16 @@ class _BreakModePageState extends State<BreakModePage>
                                 ),
                               );
                             },
-                            onLongPress: () {
+                            onLongPress: () async {
                               if (_isNavigating) return;
                               _isNavigating = true;
                               HapticFeedback.heavyImpact();
                               final duration = Duration(
                                 seconds: engine.sessionTotalFocusSeconds,
                               );
-                              engine.endSession('MANUAL END');
-                              // FIX COERENZA: ImmersiveRoute
+                              // Await so DB write completes before navigating.
+                              await engine.endSession('MANUAL END');
+                              if (!context.mounted) return;
                               Navigator.of(context).pushReplacement(
                                 ImmersiveRoute(
                                   page: SessionReportPage(

@@ -303,7 +303,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                   },
                             onLongPress: engine.isAfkWarningActive
                                 ? null
-                                : () {
+                                : () async {
                                     HapticFeedback.heavyImpact();
                                     if (isCalibration) {
                                       context
@@ -311,7 +311,7 @@ class _FocusModePageState extends State<FocusModePage> {
                                           .abortCalibrationSession();
                                       Navigator.of(context).pop();
                                     } else {
-                                      context
+                                      await context
                                           .read<CognitiveEngineProvider>()
                                           .endSession();
                                     }

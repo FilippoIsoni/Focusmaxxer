@@ -196,17 +196,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () => HapticFeedback.lightImpact(),
-                            child: const Text('Forgot Password?'),
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-
+                        
                         SizedBox(
                           height: 56,
                           child: FilledButton(

@@ -175,6 +175,7 @@ class CognitiveEngineProvider extends ChangeNotifier
       }
     } else if (state == AppLifecycleState.detached) {
       // Strict Mode Brutal Termination: Evaluates buffer validity and saves if > 10 mins
+      // Fire-and-forget: detached is best-effort on modern Android
       _commitSessionIfValid();
     }
   }
@@ -424,13 +425,16 @@ class CognitiveEngineProvider extends ChangeNotifier
   // ==========================================
 
   /// Evaluates the volatile buffer and commits it to persistent storage ONLY if validated.
-  void _commitSessionIfValid() {
+  /// IMPORTANT: This is async — always await it so the DB write completes before
+  /// the state machine resets and destroys the buffer.
+  Future<void> _commitSessionIfValid() async {
     if (_activeBuffer != null && _activeBuffer!.isValidated) {
       final finalSession = _activeBuffer!.toCompletedSession(
         currentEffectiveness,
         _terminationReason,
       );
-      analytics.commitValidatedSession(finalSession);
+      // Await the full async chain: Repository.saveSession -> DAO.insertSession
+      await analytics.commitValidatedSession(finalSession);
     }
   }
 
@@ -486,19 +490,24 @@ class CognitiveEngineProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  void endSession([String reason = 'MANUAL END']) {
+  Future<void> endSession([String reason = 'MANUAL END']) async {
     _terminationReason = reason;
-    _commitSessionIfValid();
+    // Set terminal state FIRST (synchronously) so that any tick firing during
+    // the async DB write cannot re-trigger endSession a second time.
     _currentState = EngineState.sessionEnded;
     _updateWakelock();
+    // NOW await the DB write — _activeBuffer is still alive, state won't change.
+    await _commitSessionIfValid();
+    // Notify UI only after the save is complete so navigation happens post-persist.
     notifyListeners();
   }
 
-  void _triggerDailyLimit() {
+  Future<void> _triggerDailyLimit() async {
     _terminationReason = 'CLINICAL LIMIT REACHED';
-    _commitSessionIfValid();
+    // Set terminal state immediately to block re-entry from concurrent ticks.
     _currentState = EngineState.dailyLimitReached;
     _updateWakelock();
+    await _commitSessionIfValid();
     notifyListeners();
     Future.delayed(const Duration(seconds: 2), () {
       _currentState = EngineState.sessionEnded;
