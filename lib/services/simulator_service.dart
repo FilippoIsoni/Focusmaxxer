@@ -70,12 +70,16 @@ class ScenarioSimulator {
       }
     }
 
+    // Creiamo un ciclo ripetibile di 1 ora (3600 secondi)
+    // Così gli eventi si ripeteranno ogni ora, indipendentemente dall'orologio globale.
+    int cycleSeconds = elapsedFocusSeconds % 3600;
+
     if (currentScenario == SimulationScenario.testMOutOfN) {
-      if (elapsedFocusSeconds < 1500) {
+      if (cycleSeconds < 1500) {
         return 63.0 + rand.nextInt(5);
-      } else if (elapsedFocusSeconds >= 1500 && elapsedFocusSeconds < 1560) {
+      } else if (cycleSeconds >= 1500 && cycleSeconds < 1560) {
         return 73.0 + rand.nextInt(4);
-      } else if (elapsedFocusSeconds >= 1560 && elapsedFocusSeconds < 2400) {
+      } else if (cycleSeconds >= 1560 && cycleSeconds < 2400) {
         return 63.0 + rand.nextInt(5);
       } else {
         return 76.0 + rand.nextInt(4);
@@ -85,7 +89,7 @@ class ScenarioSimulator {
     if (currentScenario == SimulationScenario.optimalFlow) {
       return 65.0 + rand.nextInt(5);
     } else if (currentScenario == SimulationScenario.acuteStress) {
-      if (elapsedFocusSeconds > 900 && elapsedFocusSeconds < 1200) {
+      if (cycleSeconds > 900 && cycleSeconds < 1200) {
         return 115.0 + rand.nextInt(10);
       } else {
         return 70.0 + rand.nextInt(8);

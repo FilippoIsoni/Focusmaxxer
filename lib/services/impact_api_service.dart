@@ -24,9 +24,20 @@ class ImpactApiService {
       throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
     }
 
-    // 3. Struttura reale: { "data": { "date": "...", "data": { ...sessione... } } }
+    // 3. Estrazione diretta dei dati basata sulla documentazione API reale
+    // Struttura attesa: { "data": [ { "dateOfSleep": "...", "efficiency": ... } ] }
     final decodedResponse = jsonDecode(response.body);
-    final sessionData = decodedResponse['data']['data'] as Map<String, dynamic>?;
+    final List<dynamic>? dataList = decodedResponse['data'] as List<dynamic>?;
+    
+    Map<String, dynamic>? sessionData;
+    if (dataList != null && dataList.isNotEmpty) {
+      // Cerchiamo esplicitamente la sessione di sonno principale (mainSleep == true)
+      final mainSleepSession = dataList.firstWhere(
+        (session) => session is Map && session['mainSleep'] == true,
+        orElse: () => dataList.first, // Fallback al primo elemento se non specificato
+      );
+      sessionData = mainSleepSession as Map<String, dynamic>?;
+    }
 
     // Se non troviamo i dati reali (es. giorno senza dati), usiamo un fallback di mockup
     return sessionData != null ? DailyBaseline.fromJson(sessionData) : _getMockBaseline();
