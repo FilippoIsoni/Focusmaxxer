@@ -24,23 +24,35 @@ class ImpactApiService {
       throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
     }
 
-    // 3. Estrazione diretta dei dati basata sulla documentazione API reale
-    // Struttura attesa: { "data": [ { "dateOfSleep": "...", "efficiency": ... } ] }
+    // 3. Parsing corretto basato sulla struttura reale dell'API
+// Struttura reale: { "status": "success", "data": { "date": "...", "data": { ... } } }
     final decodedResponse = jsonDecode(response.body);
-    final List<dynamic>? dataList = decodedResponse['data'] as List<dynamic>?;
-    
-    Map<String, dynamic>? sessionData;
-    if (dataList != null && dataList.isNotEmpty) {
-      // Cerchiamo esplicitamente la sessione di sonno principale (mainSleep == true)
-      final mainSleepSession = dataList.firstWhere(
-        (session) => session is Map && session['mainSleep'] == true,
-        orElse: () => dataList.first, // Fallback al primo elemento se non specificato
-      );
-      sessionData = mainSleepSession as Map<String, dynamic>?;
-    }
 
-    // Se non troviamo i dati reali (es. giorno senza dati), usiamo un fallback di mockup
-    return sessionData != null ? DailyBaseline.fromJson(sessionData) : _getMockBaseline();
+    final Map<String, dynamic>? outerData = decodedResponse['data'] as Map<String, dynamic>?;
+
+// I dati possono essere un oggetto singolo o una lista
+    final dynamic rawData = outerData?['data'];
+    Map<String, dynamic>? sessionData;
+
+    if (rawData is List && rawData.isNotEmpty) {
+      // Se è una lista, cerchiamo mainSleep == true, altrimenti prendiamo il primo
+      sessionData = rawData.firstWhere(
+        (s) => s is Map && s['mainSleep'] == true,
+        orElse: () => rawData.first,
+      ) as Map<String, dynamic>?;
+    } else if (rawData is Map) {
+      // Se è già un oggetto singolo, lo prendiamo direttamente
+      sessionData = rawData as Map<String, dynamic>;
+    }
+    print('📅 Data richiesta: $dateString');
+    print('📦 Outer data: $outerData');
+    print('😴 Session data: $sessionData');
+    print('⚡ Usando mock: ${sessionData == null}');
+
+
+    return sessionData != null
+        ? DailyBaseline.fromJson(sessionData)
+        : _getMockBaseline();
   }
 
   DailyBaseline _getMockBaseline() {
