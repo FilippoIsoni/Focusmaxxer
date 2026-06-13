@@ -130,21 +130,10 @@ class _LoginPageState extends State<LoginPage> {
                         // BRAND ICON
                         Align(
                           alignment: Alignment.center,
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: colorScheme.primary.withAlpha(51),
-                                width: 1,
-                              ),
-                              color: colorScheme.surface.withAlpha(150),
-                            ),
-                            child: Icon(
-                              Icons.fingerprint_rounded,
-                              size: 64,
-                              color: colorScheme.primary,
-                            ),
+                          child: Image.asset(
+                            'assets/focusmaxxer_logo_v3.png',
+                            width: 120,
+                            height: 120,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -214,6 +203,15 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 40),
+                        Text(
+                          'By signing in, you agree to Focusmaxxer\'s Terms of Service and Privacy Policy.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant.withAlpha(150),
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
