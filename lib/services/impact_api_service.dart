@@ -24,28 +24,30 @@ class ImpactApiService {
       throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
     }
 
-    // 3. Parsing corretto basato sulla struttura reale dell'API
-// Struttura reale: { "status": "success", "data": { "date": "...", "data": { ... } } }
+    // 3. Parsing — struttura reale: { "status": "success", "data": [ {...}, {...} ] }
     final decodedResponse = jsonDecode(response.body);
-
-    final Map<String, dynamic>? outerData = decodedResponse['data'] as Map<String, dynamic>?;
-
-// I dati possono essere un oggetto singolo o una lista
-    final dynamic rawData = outerData?['data'];
+    final dynamic rawData = decodedResponse['data'];
     Map<String, dynamic>? sessionData;
 
     if (rawData is List && rawData.isNotEmpty) {
-      // Se è una lista, cerchiamo mainSleep == true, altrimenti prendiamo il primo
       sessionData = rawData.firstWhere(
         (s) => s is Map && s['mainSleep'] == true,
         orElse: () => rawData.first,
       ) as Map<String, dynamic>?;
     } else if (rawData is Map) {
-      // Se è già un oggetto singolo, lo prendiamo direttamente
-      sessionData = rawData as Map<String, dynamic>;
+      // fallback: struttura annidata con 'data' interno
+      final inner = rawData['data'];
+      if (inner is List && inner.isNotEmpty) {
+        sessionData = inner.firstWhere(
+          (s) => s is Map && s['mainSleep'] == true,
+          orElse: () => inner.first,
+        ) as Map<String, dynamic>?;
+      } else if (inner is Map) {
+        sessionData = Map<String, dynamic>.from(inner);
+      }
     }
     print('📅 Data richiesta: $dateString');
-    print('📦 Outer data: $outerData');
+    print('📦 Raw data: $rawData');
     print('😴 Session data: $sessionData');
     print('⚡ Usando mock: ${sessionData == null}');
 
