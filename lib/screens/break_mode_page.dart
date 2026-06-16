@@ -45,7 +45,7 @@ class _BreakModePageState extends State<BreakModePage>
   void _checkAutoRoute() {
     if (_isNavigating || !mounted) return;
 
-    if (_engineRef.advisoryMessage.contains('Maximum break reached')) {
+    if (_engineRef.isMaxBreakReached) {
       _isNavigating = true;
       HapticFeedback.heavyImpact();
       final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);

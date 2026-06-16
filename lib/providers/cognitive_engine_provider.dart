@@ -63,6 +63,7 @@ class CognitiveEngineProvider extends ChangeNotifier
   // ==========================================
   EngineState _currentState = EngineState.idle;
   late DateTime _internalClock;
+  bool _isDisposed = false;
 
   // Segment Counters (Used only for current phase logic, NOT for final reporting)
   int _targetSegmentSeconds = 0;
@@ -74,6 +75,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   bool _isBreakRecommended = false;
   bool _isFocusRecommended = false;
+  bool _isMaxBreakReached = false;
   String _advisoryMessage = "";
 
   bool _isAfkWarningActive = false;
@@ -107,6 +109,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   bool get isBreakRecommended => _isBreakRecommended;
   bool get isFocusRecommended => _isFocusRecommended;
+  bool get isMaxBreakReached => _isMaxBreakReached;
   String get advisoryMessage => _advisoryMessage;
   bool get isAfkWarningActive => _isAfkWarningActive;
 
@@ -127,7 +130,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   /// Determines if the AFK condition happened during the critical baseline calibration phase
   bool get isCalibrationAnomaly =>
-      _isAfkWarningActive && _elapsedFocusSeconds <= calibrationWindowSeconds;
+      _isAfkWarningActive && _currentState == EngineState.analyzingBaseline;
 
   /// Safe UI getters proxied through the Active Buffer
   int get sessionTotalFocusSeconds => _activeBuffer?.totalFocusSeconds ?? 0;
@@ -182,6 +185,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   @override
   void dispose() {
+    _isDisposed = true;
     WidgetsBinding.instance.removeObserver(this);
     hardware.setWakelock(false);
     clock.removeListener(_onGlobalTick);
@@ -256,6 +260,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _breakExtensions = 0;
     _isBreakRecommended = false;
     _isFocusRecommended = false;
+    _isMaxBreakReached = false;
     _isAfkWarningActive = false;
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
@@ -406,6 +411,7 @@ class CognitiveEngineProvider extends ChangeNotifier
           _triggerDoubleVibration();
         } else {
           _isFocusRecommended = false;
+          _isMaxBreakReached = true;
           _advisoryMessage =
               "Maximum break reached. Recovery still incomplete.";
           _triggerDoubleVibration();
@@ -469,6 +475,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _elapsedBreakSeconds = 0;
     _isBreakRecommended = false;
     _isFocusRecommended = false;
+    _isMaxBreakReached = false;
     _isAfkWarningActive = false;
     _advisoryMessage = "Recovery initiated.";
     _currentState = EngineState.breakMode;
@@ -510,6 +517,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     await _commitSessionIfValid();
     notifyListeners();
     Future.delayed(const Duration(seconds: 2), () {
+      if (_isDisposed) return;
       _currentState = EngineState.sessionEnded;
       notifyListeners();
     });
@@ -531,6 +539,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _breakExtensions = 0;
     _isBreakRecommended = false;
     _isFocusRecommended = false;
+    _isMaxBreakReached = false;
     _isAfkWarningActive = false;
     _advisoryMessage = "";
 
