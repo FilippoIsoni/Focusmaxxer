@@ -24,9 +24,19 @@ class ImpactApiService {
       throw Exception('Errore nel recupero dati (HTTP ${response.statusCode})');
     }
 
-    // 3. Parsing — struttura reale: { "status": "success", "data": [ {...}, {...} ] }
+    // 3. Parsing — struttura reale: { "status": "success", "data": { "date": "...", "data": [...] } }
+    // Guardia: se i dati mancano l'API ritorna { "data": [] } invece di un oggetto
     final decodedResponse = jsonDecode(response.body);
-    final dynamic rawData = decodedResponse['data'];
+    final dynamic topLevel = decodedResponse['data'];
+    print('📅 Data richiesta: $dateString');
+    print('📦 Top level: $topLevel');
+    if (topLevel is! Map) {
+      print('⚡ Nessun dato — uso mock');
+      return _getMockBaseline();
+    }
+
+    final Map<String, dynamic>? outerData = topLevel as Map<String, dynamic>?;
+    final dynamic rawData = outerData?['data'];
     Map<String, dynamic>? sessionData;
 
     if (rawData is List && rawData.isNotEmpty) {
@@ -35,26 +45,15 @@ class ImpactApiService {
         orElse: () => rawData.first,
       ) as Map<String, dynamic>?;
     } else if (rawData is Map) {
-      // fallback: struttura annidata con 'data' interno
-      final inner = rawData['data'];
-      if (inner is List && inner.isNotEmpty) {
-        sessionData = inner.firstWhere(
-          (s) => s is Map && s['mainSleep'] == true,
-          orElse: () => inner.first,
-        ) as Map<String, dynamic>?;
-      } else if (inner is Map) {
-        sessionData = Map<String, dynamic>.from(inner);
-      }
+      sessionData = rawData as Map<String, dynamic>;
     }
-    print('📅 Data richiesta: $dateString');
-    print('📦 Raw data: $rawData');
+    print('📦 Outer data: $outerData');
     print('😴 Session data: $sessionData');
-    print('⚡ Usando mock: ${sessionData == null}');
+    
 
 
-    return sessionData != null
-        ? DailyBaseline.fromJson(sessionData)
-        : _getMockBaseline();
+    return DailyBaseline.fromJson(sessionData!);
+        
   }
 
   DailyBaseline _getMockBaseline() {
