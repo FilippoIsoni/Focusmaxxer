@@ -59,20 +59,21 @@ class AuthProvider extends ChangeNotifier {
   //    The [api] instance is passed in by the caller (the DI-registered
   //    singleton) so we reuse the same service — with its onSessionExpired
   //    callback already wired — instead of spawning a second instance.
-  Future<void> login(
+  //    Returns the [AuthOutcome] so the UI can show a message that matches the
+  //    real failure mode (wrong credentials vs. no network vs. server error).
+  Future<AuthOutcome> login(
     ImpactApiService api,
     String username,
     String password,
   ) async {
-    final statusCode = await api.getAndStoreTokens(username, password);
+    final outcome = await api.getAndStoreTokens(username, password);
 
-    if (statusCode == 200) {
+    if (outcome == AuthOutcome.success) {
       await prefs.setBool('isLoggedIn', true);
       status = AuthStatus.authenticated;
       notifyListeners();
-    } else {
-      throw Exception('Login failed (HTTP $statusCode)');
     }
+    return outcome;
   }
 
   // CANCELLA il login dalla memoria

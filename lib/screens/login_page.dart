@@ -40,7 +40,7 @@ class _LoginPageState extends State<LoginPage> {
     HapticFeedback.lightImpact();
 
     try {
-      await context.read<AuthProvider>().login(
+      final outcome = await context.read<AuthProvider>().login(
         context.read<ImpactApiService>(),
         _emailController.text.trim(),
         _passwordController.text,
@@ -48,33 +48,58 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // Nuova Transizione: Immersione nel Bootloader (il sistema "risucchia" l'utente)
-      Navigator.of(
-        context,
-      ).pushReplacement(ImmersiveRoute(page: const BootloaderScreen()));
+      if (outcome == AuthOutcome.success) {
+        // Nuova Transizione: Immersione nel Bootloader (il sistema "risucchia" l'utente)
+        Navigator.of(
+          context,
+        ).pushReplacement(ImmersiveRoute(page: const BootloaderScreen()));
+        return;
+      }
+
+      setState(() => _isLoading = false);
+      _showErrorSnackBar(_messageForOutcome(outcome));
     } catch (e) {
+      // Unexpected failure (e.g. local storage write): keep a generic fallback.
       if (!mounted) return;
       setState(() => _isLoading = false);
-      final colorScheme = Theme.of(context).colorScheme;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.error_outline_rounded, color: colorScheme.onError),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Invalid credentials. Please try again.',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: colorScheme.error,
-        ),
-      );
+      _showErrorSnackBar('Something went wrong. Please try again.');
     }
+  }
+
+  /// Maps a non-success login outcome to a user-facing message, so a network
+  /// problem is not mislabelled as wrong credentials.
+  String _messageForOutcome(AuthOutcome outcome) {
+    switch (outcome) {
+      case AuthOutcome.invalidCredentials:
+        return 'Invalid credentials. Please try again.';
+      case AuthOutcome.networkError:
+        return 'No connection. Check your network and try again.';
+      case AuthOutcome.serverError:
+        return 'Server error. Please try again later.';
+      case AuthOutcome.success:
+        return ''; // Not reachable: success is handled before this call.
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: colorScheme.onError),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: colorScheme.error,
+      ),
+    );
   }
 
   @override

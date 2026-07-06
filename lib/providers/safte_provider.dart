@@ -16,6 +16,12 @@ class SafteProvider extends ChangeNotifier {
   DateTime? _tSleep;
   double? _baselineReservoir; // Può essere null al primo avvio assoluto
 
+  // Single-entry memo for getStateAt: within one clock tick several widgets ask
+  // for the same targetTime, so we compute the SAFTE model once and reuse it.
+  // Invalidated whenever the biological anchors change (syncWithServer).
+  DateTime? _cachedTarget;
+  SafteState? _cachedState;
+
   // ==========================================
   // GETTERS PER L'ESTERNO
   // ==========================================
@@ -94,6 +100,10 @@ class SafteProvider extends ChangeNotifier {
     _tWake = sWake;
     _tSleep = sSleep;
 
+    // The anchors that feed getStateAt changed: drop the memoized state.
+    _cachedTarget = null;
+    _cachedState = null;
+
     await _persistAnchors();
     notifyListeners();
 
@@ -110,11 +120,17 @@ class SafteProvider extends ChangeNotifier {
   /// Porta il targetTime indietro di [serverLag] per allinearlo alla finestra
   /// temporale dei dati reali scaricati dal server, evitando assunzioni sui timestamp.
   SafteState getStateAt(DateTime targetTime) {
-    return SafteEngine.computeStateAt(
+    final cached = _cachedState;
+    if (cached != null && _cachedTarget == targetTime) return cached;
+
+    final state = SafteEngine.computeStateAt(
       reservoirAtWakeup: baselineReservoir,
       wakeupTime: wakeupTime,
       targetTime: targetTime.subtract(serverLag),
     );
+    _cachedTarget = targetTime;
+    _cachedState = state;
+    return state;
   }
 
   // ==========================================

@@ -7,6 +7,23 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/daily_baseline.dart';
 
+/// Outcome of a token exchange (login or refresh). Lets callers tell a real
+/// auth rejection apart from a transient network problem or a server-side
+/// error, instead of overloading raw HTTP status codes with magic sentinels.
+enum AuthOutcome {
+  /// Tokens obtained and stored successfully.
+  success,
+
+  /// The server rejected the credentials or the refresh token (HTTP 401/403).
+  invalidCredentials,
+
+  /// Connectivity or timeout failure — retryable, must NOT trigger a logout.
+  networkError,
+
+  /// Any other non-2xx response, or a 200 carrying an unusable body.
+  serverError,
+}
+
 class ImpactApiService {
   Function()? onSessionExpired;
 
@@ -80,12 +97,6 @@ class ImpactApiService {
   static String tokenEndpoint = 'gate/v1/token/';
   static String refreshEndpoint = 'gate/v1/refresh/';
 
-  // Non-HTTP status codes used internally to distinguish failure modes so
-  // callers can tell a transient network problem apart from a real auth
-  // rejection (see requestProtectedGet).
-  static const int _networkErrorStatus = 0;
-  static const int _malformedBodyStatus = 599;
-
   /// Parses a token response body and persists access/refresh only if both are
   /// valid non-empty strings. Returns false on a malformed payload so the
   /// caller never stores a null/garbage token.
@@ -111,37 +122,43 @@ class ImpactApiService {
     }
   }
 
+  /// Maps a completed HTTP response to an [AuthOutcome], storing the tokens on
+  /// a valid 200. A 200 with an unusable body is treated as a server error.
+  Future<AuthOutcome> _outcomeFromResponse(http.Response response) async {
+    if (response.statusCode == 200) {
+      return await _storeTokensFromBody(response.body)
+          ? AuthOutcome.success
+          : AuthOutcome.serverError;
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      return AuthOutcome.invalidCredentials;
+    }
+    return AuthOutcome.serverError;
+  }
+
   /// Refreshes the JWT tokens stored in SharedPreferences.
-  /// Returns the HTTP status on completion, [_networkErrorStatus] on a
-  /// network/timeout failure, or [_malformedBodyStatus] if a 200 carried an
-  /// unusable body.
-  Future<int> refreshTokens() async {
+  Future<AuthOutcome> refreshTokens() async {
     final url = ImpactApiService.baseUrl + ImpactApiService.refreshEndpoint;
     final sp = await SharedPreferences.getInstance();
     final refresh = sp.getString('refresh');
 
-    if (refresh == null) return 401;
+    // No refresh token means the session is effectively gone: treat it as an
+    // auth rejection so the caller logs out rather than retrying forever.
+    if (refresh == null) return AuthOutcome.invalidCredentials;
 
     try {
       final response = await http
           .post(Uri.parse(url), body: {'refresh': refresh})
           .timeout(_networkTimeout);
-
-      if (response.statusCode == 200) {
-        return await _storeTokensFromBody(response.body)
-            ? 200
-            : _malformedBodyStatus;
-      }
-      return response.statusCode;
+      return _outcomeFromResponse(response);
     } catch (e) {
       debugPrint('refreshTokens failed: $e');
-      return _networkErrorStatus;
+      return AuthOutcome.networkError;
     }
   }
 
   /// Exchanges username/password for JWT tokens and stores them.
-  /// Same status contract as [refreshTokens].
-  Future<int> getAndStoreTokens(String username, String password) async {
+  Future<AuthOutcome> getAndStoreTokens(String username, String password) async {
     final url = ImpactApiService.baseUrl + ImpactApiService.tokenEndpoint;
 
     try {
@@ -149,29 +166,23 @@ class ImpactApiService {
         'username': username,
         'password': password,
       }).timeout(_networkTimeout);
-
-      if (response.statusCode == 200) {
-        return await _storeTokensFromBody(response.body)
-            ? 200
-            : _malformedBodyStatus;
-      }
-      return response.statusCode;
+      return _outcomeFromResponse(response);
     } catch (e) {
       debugPrint('getAndStoreTokens failed: $e');
-      return _networkErrorStatus;
+      return AuthOutcome.networkError;
     }
   }
 
   /// Reacts to a failed token refresh. Forces a logout only on a genuine auth
-  /// rejection (401/403); a network/timeout/server failure is surfaced as a
-  /// retryable error WITHOUT logging the user out, so a transient connectivity
-  /// blip does not destroy the session.
-  Never _handleRefreshFailure(int status) {
-    if (status == 401 || status == 403) {
+  /// rejection; a network/timeout/server failure is surfaced as a retryable
+  /// error WITHOUT logging the user out, so a transient connectivity blip does
+  /// not destroy the session.
+  Never _handleRefreshFailure(AuthOutcome outcome) {
+    if (outcome == AuthOutcome.invalidCredentials) {
       onSessionExpired?.call();
       throw Exception('SessionExpired');
     }
-    throw Exception('NetworkError ($status)');
+    throw Exception('NetworkError');
   }
 
   /// Wrapper for authenticated GET calls that transparently handles 401s and
@@ -182,11 +193,11 @@ class ImpactApiService {
 
     // 1. Preemptive check: if the token is missing or locally expired, refresh now.
     if (accessToken == null || JwtDecoder.isExpired(accessToken)) {
-      final refreshStatus = await refreshTokens();
-      if (refreshStatus == 200) {
+      final outcome = await refreshTokens();
+      if (outcome == AuthOutcome.success) {
         accessToken = sp.getString('access');
       } else {
-        _handleRefreshFailure(refreshStatus);
+        _handleRefreshFailure(outcome);
       }
     }
 
@@ -200,15 +211,15 @@ class ImpactApiService {
     // 2. Reactive check: the server may reject with 401 for other reasons
     // (token revoked server-side, or expired in the millisecond before the call).
     if (response.statusCode == 401) {
-      final refreshStatus = await refreshTokens();
+      final outcome = await refreshTokens();
 
-      if (refreshStatus == 200) {
+      if (outcome == AuthOutcome.success) {
         accessToken = sp.getString('access');
         response = await http.get(url, headers: {
           'Authorization': 'Bearer $accessToken',
         }).timeout(_networkTimeout);
       } else {
-        _handleRefreshFailure(refreshStatus);
+        _handleRefreshFailure(outcome);
       }
     }
 
