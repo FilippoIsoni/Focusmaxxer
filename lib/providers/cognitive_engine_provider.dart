@@ -113,8 +113,6 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   SafteState get safteSnapshot => safteProvider.getStateAt(_internalClock);
   double get currentEffectiveness => safteSnapshot.effectiveness;
-  double get currentFatigue =>
-      SafteEngine.maxReservoirCapacity - safteSnapshot.reservoir;
 
   DateTime get wakeupTime => safteProvider.wakeupTime;
   double get capacityMax => SafteEngine.maxReservoirCapacity;
@@ -123,10 +121,8 @@ class CognitiveEngineProvider extends ChangeNotifier
       ? (_elapsedFocusSeconds / _targetSegmentSeconds).clamp(0.0, 1.0)
       : 0.0;
   double get currentStressIndex => _biometrics.currentStressIndex;
-  int get segmentDurationMinutes => _targetSegmentSeconds ~/ 60;
   int get workedTodayMinutes => analytics.dailyWorkedSeconds ~/ 60;
   bool get hasIncompleteRecovery => _breakExtensions > 0;
-  double get morningRHR => _biometrics.muBase;
 
   bool get isBreakRecommended => _isBreakRecommended;
   bool get isFocusRecommended => _isFocusRecommended;
@@ -560,11 +556,16 @@ class CognitiveEngineProvider extends ChangeNotifier
         (_elapsedFocusSeconds * _breakDurationRatio).toInt();
     _targetBreakSeconds = math.max(300, calculatedBreakSeconds);
     _elapsedBreakSeconds = 0;
+    // A manual break is a fresh break: reset the extension budget and any stale
+    // AFK counters so leftover state from the previous segment does not carry over.
+    _breakExtensions = 0;
     _isBreakRecommended = false;
     _isFocusRecommended = false;
     _isMaxBreakReached = false;
     _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
+    _afkWarningSeconds = 0;
+    _secondsSinceLastStepCheck = 0;
     _advisoryMessage = "Recovery initiated.";
     _currentState = EngineState.breakMode;
     _updateWakelock();
@@ -578,8 +579,13 @@ class CognitiveEngineProvider extends ChangeNotifier
     _biometrics.clearSteps();
     _isBreakRecommended = false;
     _isFocusRecommended = false;
+    // Clear break-phase leftovers so a stale "max break reached" flag or AFK
+    // counter cannot bleed into the new focus segment.
+    _isMaxBreakReached = false;
     _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
+    _afkWarningSeconds = 0;
+    _secondsSinceLastStepCheck = 0;
     _advisoryMessage = "Session active.";
     _currentState = EngineState.focus;
     _updateWakelock();
@@ -594,6 +600,9 @@ class CognitiveEngineProvider extends ChangeNotifier
     _updateWakelock();
     // NOW await the DB write — _activeBuffer is still alive, state won't change.
     await _commitSessionIfValid();
+    // The provider may have been disposed while the async save was in flight;
+    // notifying a disposed ChangeNotifier throws.
+    if (_isDisposed) return;
     // Notify UI only after the save is complete so navigation happens post-persist.
     notifyListeners();
   }
@@ -604,17 +613,14 @@ class CognitiveEngineProvider extends ChangeNotifier
     _currentState = EngineState.dailyLimitReached;
     _updateWakelock();
     await _commitSessionIfValid();
+    // Guard against a dispose that happened during the async save.
+    if (_isDisposed) return;
     notifyListeners();
     Future.delayed(const Duration(seconds: 2), () {
       if (_isDisposed) return;
       _currentState = EngineState.sessionEnded;
       notifyListeners();
     });
-  }
-
-  void finalizeSession() {
-    _currentState = EngineState.idle;
-    notifyListeners();
   }
 
   void resetEngine() {

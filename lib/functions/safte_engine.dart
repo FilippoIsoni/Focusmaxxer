@@ -133,16 +133,14 @@ class SafteEngine {
 
     final double c = _computeCircadianModulator(tHours);
 
-    // Sleep Inertia: Smooth exponential decay
-    double i = 0.0;
+    // Sleep Inertia: Smooth exponential decay. awakeHours is always >= 0
+    // (awakeMinutes is clamped to 0 above), so the penalty applies unconditionally.
     final double awakeHours = awakeMinutes / 60.0;
-    if (awakeHours >= 0.0) {
-      final double fatigueAmplifier = 1.0 + depletionRatio;
-      i =
-          _sleepInertiaBasePenalty *
-          math.exp(-awakeHours * 2.0) *
-          fatigueAmplifier;
-    }
+    final double fatigueAmplifier = 1.0 + depletionRatio;
+    final double i =
+        _sleepInertiaBasePenalty *
+        math.exp(-awakeHours * 2.0) *
+        fatigueAmplifier;
 
     final double e =
         (100.0 * reservoirRatio) + (c * (7.0 + 5.0 * depletionRatio)) + i;

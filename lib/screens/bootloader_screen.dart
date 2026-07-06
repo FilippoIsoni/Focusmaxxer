@@ -77,6 +77,11 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
 
       // 5. SYSTEM READY -> LAUNCH (Tuffo nel sistema)
       _routeTo(const HomeDashboard());
+    } on SessionExpiredException {
+      // The session was rejected server-side (onSessionExpired already logged
+      // out). Route to login instead of the retryable "SYNC FAILED" screen,
+      // whose Retry button could never succeed once the session is gone.
+      if (mounted) _routeTo(const LoginPage());
     } catch (e) {
       debugPrint("Bootloader Error: $e");
       if (mounted) {

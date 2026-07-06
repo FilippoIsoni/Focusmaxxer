@@ -10,6 +10,14 @@ import '../models/daily_baseline.dart';
 /// Outcome of a token exchange (login or refresh). Lets callers tell a real
 /// auth rejection apart from a transient network problem or a server-side
 /// error, instead of overloading raw HTTP status codes with magic sentinels.
+/// Thrown when the backend rejects the refresh token (HTTP 401/403), i.e. the
+/// session is genuinely gone. Lets the boot sequence route the user to the
+/// login screen instead of showing a retryable "network error" that can never
+/// succeed. A transient connectivity failure throws a plain Exception instead.
+class SessionExpiredException implements Exception {
+  const SessionExpiredException();
+}
+
 enum AuthOutcome {
   /// Tokens obtained and stored successfully.
   success,
@@ -180,7 +188,7 @@ class ImpactApiService {
   Never _handleRefreshFailure(AuthOutcome outcome) {
     if (outcome == AuthOutcome.invalidCredentials) {
       onSessionExpired?.call();
-      throw Exception('SessionExpired');
+      throw const SessionExpiredException();
     }
     throw Exception('NetworkError');
   }

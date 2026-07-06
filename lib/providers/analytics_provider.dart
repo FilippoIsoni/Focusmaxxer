@@ -43,10 +43,12 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Applies a fully validated session to the daily limits and historical ledger.
   Future<void> commitValidatedSession(CognitiveSession session) async {
-    _dailyWorkedSeconds += session.durationSeconds;
-
-    // Save via Repository and retrieve the auto-generated ID
+    // Save via Repository and retrieve the auto-generated ID FIRST. Only bump
+    // the daily counter after the write succeeds: if saveSession throws, the
+    // counter stays untouched and the engine's retry re-runs cleanly, so the
+    // same session can never be double-counted (this method is not idempotent).
     final insertedId = await _repository.saveSession(session);
+    _dailyWorkedSeconds += session.durationSeconds;
 
     // Reconstruct the immutable object with the DB-assigned ID
     // L'RPE è stato rimosso per rispecchiare l'entità corretta.
@@ -60,7 +62,7 @@ class AnalyticsProvider extends ChangeNotifier with WidgetsBindingObserver {
     );
 
     _sessions.insert(0, insertedSession);
-    saveWorkloadToDisk();
+    await saveWorkloadToDisk();
     notifyListeners();
   }
 
