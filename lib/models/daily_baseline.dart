@@ -12,10 +12,21 @@ class DailyBaseline {
   });
 
   factory DailyBaseline.fromJson(Map<String, dynamic> json) {
+    final bedTime = _parseDate(json['startTime']?.toString(), 10);
+    var wakeupTime = _parseDate(json['endTime']?.toString(), 2);
+
+    // Sleep crosses midnight: wakeup must be after bedtime. Roll wakeup forward
+    // a day when it is not, which fixes the overnight case and the degraded
+    // MM-DD fallback. On full ISO timestamps wakeup is already later, so this
+    // never triggers.
+    if (!wakeupTime.isAfter(bedTime)) {
+      wakeupTime = wakeupTime.add(const Duration(days: 1));
+    }
+
     return DailyBaseline(
       sleepEfficiency: (json['efficiency'] as num?)?.toDouble() ?? 85.0,
-      bedTime: _parseDate(json['startTime']?.toString(), 10),
-      wakeupTime: _parseDate(json['endTime']?.toString(), 2),
+      bedTime: bedTime,
+      wakeupTime: wakeupTime,
       mainSleep: json['mainSleep'] as bool? ?? true,
     );
   }

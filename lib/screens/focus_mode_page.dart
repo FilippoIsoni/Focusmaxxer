@@ -359,9 +359,9 @@ class _FocusModePageState extends State<FocusModePage> {
             ),
 
             if (engine.isCalibrationAnomaly)
-              const _CalibrationAnomalyOverlay()
+              _CalibrationAnomalyOverlay(reason: engine.afkReason)
             else if (engine.isAfkWarningActive)
-              const _AfkWarningOverlay(),
+              _AfkWarningOverlay(reason: engine.afkReason),
           ],
         ),
       ),
@@ -371,10 +371,14 @@ class _FocusModePageState extends State<FocusModePage> {
 
 // Overlays privati rimasti identici
 class _CalibrationAnomalyOverlay extends StatelessWidget {
-  const _CalibrationAnomalyOverlay();
+  const _CalibrationAnomalyOverlay({required this.reason});
+  final AfkReason reason;
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final String detail = reason == AfkReason.background
+        ? "The app was minimized.\nKeep it in the foreground: data collection stops in background."
+        : "Anomalous condition detected.\nPlease do not move or use the phone during the baseline calibration phase.";
     return Positioned.fill(
       child: ClipRect(
         child: BackdropFilter(
@@ -403,10 +407,10 @@ class _CalibrationAnomalyOverlay extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      "Anomalous condition detected.\nPlease do not move or use the phone during the baseline calibration phase.",
+                    Text(
+                      detail,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 16,
                         height: 1.5,
@@ -470,10 +474,19 @@ class _CalibrationAnomalyOverlay extends StatelessWidget {
 }
 
 class _AfkWarningOverlay extends StatelessWidget {
-  const _AfkWarningOverlay();
+  const _AfkWarningOverlay({required this.reason});
+  final AfkReason reason;
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final bool isBackground = reason == AfkReason.background;
+    final IconData icon = isBackground
+        ? Icons.visibility_off_rounded
+        : Icons.directions_walk_rounded;
+    final String title = isBackground ? "APP MINIMIZED" : "STEPS DETECTED";
+    final String body = isBackground
+        ? "Data collection requires the app in foreground.\nPress the button to resume."
+        : "Timer paused passively.\nPress the button to auto-resume.";
     return Positioned.fill(
       child: ClipRect(
         child: BackdropFilter(
@@ -484,14 +497,10 @@ class _AfkWarningOverlay extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.directions_walk_rounded,
-                    color: colorScheme.secondary,
-                    size: 64,
-                  ),
+                  Icon(icon, color: colorScheme.secondary, size: 64),
                   const SizedBox(height: 24),
                   Text(
-                    "STEPS DETECTED",
+                    title,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: colorScheme.secondary,
                       fontWeight: FontWeight.bold,
@@ -499,10 +508,10 @@ class _AfkWarningOverlay extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    "Timer paused passively.\nPress the button to auto-resume.",
+                  Text(
+                    body,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white70,
                       fontSize: 16,
                       height: 1.5,

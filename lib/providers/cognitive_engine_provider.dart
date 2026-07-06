@@ -29,6 +29,10 @@ enum EngineState {
   sessionEnded,
 }
 
+/// Why the AFK / anomaly state was raised, so the UI and the session report
+/// can describe the real cause instead of always blaming movement.
+enum AfkReason { movement, background }
+
 /// Core State Machine governing the Focus/Break lifecycle and telemetry ingestion.
 /// Purely coordinates data flow between the UI, the Rules Engine, and the Hardware Adapter.
 class CognitiveEngineProvider extends ChangeNotifier
@@ -50,6 +54,16 @@ class CognitiveEngineProvider extends ChangeNotifier
   static const int tickDurationSeconds = 5;
   static const int afkTimeoutSeconds = 60;
   static const int calibrationWindowSeconds = 600;
+
+  // Catch-up cap: at most 30 virtual minutes (360 ticks) are replayed per
+  // resume. A larger jump means a long absence and is handled as a void session.
+  static const int maxCatchupTicks = 360;
+
+  // Off-protocol escalation: nudge at 5 and 10 minutes past the break advice,
+  // abort the session at 15 minutes.
+  static const int _protocolWarn1Seconds = 300;
+  static const int _protocolWarn2Seconds = 600;
+  static const int _protocolAbortSeconds = 900;
 
   static const double _breakDurationRatio = 0.33;
   static const int _breakExtensionSeconds = 300;
@@ -82,8 +96,10 @@ class CognitiveEngineProvider extends ChangeNotifier
   bool _isFocusRecommended = false;
   bool _isMaxBreakReached = false;
   String _advisoryMessage = "";
+  int _secondsSinceBreakRecommended = 0;
 
   bool _isAfkWarningActive = false;
+  AfkReason _afkReason = AfkReason.movement;
   int _afkWarningSeconds = 0;
   int _secondsSinceLastStepCheck = 0;
 
@@ -117,6 +133,7 @@ class CognitiveEngineProvider extends ChangeNotifier
   bool get isMaxBreakReached => _isMaxBreakReached;
   String get advisoryMessage => _advisoryMessage;
   bool get isAfkWarningActive => _isAfkWarningActive;
+  AfkReason get afkReason => _afkReason;
 
   bool get isDailyLimitReached =>
       analytics.dailyWorkedSeconds >= SessionRulesEngine.dailyMaxSeconds;
@@ -176,6 +193,7 @@ class CognitiveEngineProvider extends ChangeNotifier
       if ((_currentState == EngineState.focus ||
               _currentState == EngineState.analyzingBaseline) &&
           !_isAfkWarningActive) {
+        _afkReason = AfkReason.background;
         _isAfkWarningActive = true;
         _updateWakelock();
         _triggerDoubleVibration();
@@ -229,6 +247,25 @@ class CognitiveEngineProvider extends ChangeNotifier
 
     if (delta >= tickDurationSeconds) {
       final int missedTicks = delta ~/ tickDurationSeconds;
+
+      // Long absence (typically a long background then resume): replaying every
+      // missed tick would freeze the UI thread and, in breakMode, grow the
+      // buffer without bound. Past the cap the session is void.
+      if (missedTicks > maxCatchupTicks) {
+        _internalClock = clock.currentTime;
+        if (_currentState == EngineState.focus ||
+            _currentState == EngineState.breakMode) {
+          // Abort the session directly instead of replaying.
+          endSession('OFF PROTOCOL');
+        } else {
+          // analyzingBaseline: the paused/inactive handler already armed the
+          // calibration anomaly overlay; keep it waiting for the user's
+          // decision instead of aborting into a bogus report.
+          notifyListeners();
+        }
+        return;
+      }
+
       for (int i = 0; i < missedTicks; i++) {
         if (_currentState == EngineState.idle ||
             _currentState == EngineState.sessionEnded) {
@@ -239,6 +276,8 @@ class CognitiveEngineProvider extends ChangeNotifier
         );
         _processTick();
       }
+      // Absorb the sub-tick remainder so the internal clock never lags behind.
+      _internalClock = clock.currentTime;
       notifyListeners();
     }
   }
@@ -268,6 +307,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _isBreakRecommended = false;
     _isFocusRecommended = false;
     _isMaxBreakReached = false;
+    _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
@@ -321,6 +361,7 @@ class CognitiveEngineProvider extends ChangeNotifier
           !_isAfkWarningActive &&
           (_currentState == EngineState.focus ||
               _currentState == EngineState.analyzingBaseline)) {
+        _afkReason = AfkReason.movement;
         _isAfkWarningActive = true;
         _updateWakelock();
         _triggerDoubleVibration();
@@ -344,8 +385,10 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   void _handleAnalyzingBaseline() {
     if (_isAfkWarningActive) {
-      _afkWarningSeconds += tickDurationSeconds;
-      if (_afkWarningSeconds >= afkTimeoutSeconds) abortCalibrationSession();
+      // Calibration anomaly: hold the "CALIBRATION FAILED" overlay until the
+      // user explicitly picks RESTART or ABORT. Auto-aborting on a timeout let
+      // the (fast-forwarded) clock dismiss the decision screen and stranded the
+      // user on an idle standby page.
       return;
     }
 
@@ -361,7 +404,15 @@ class CognitiveEngineProvider extends ChangeNotifier
   void _handleFocusMode() {
     if (_isAfkWarningActive) {
       _afkWarningSeconds += tickDurationSeconds;
-      if (_afkWarningSeconds >= afkTimeoutSeconds) endSession();
+      if (_afkWarningSeconds >= afkTimeoutSeconds) {
+        // Terminate with a reason that reflects the real cause, so the report
+        // shows "app backgrounded" vs "user movement" instead of "manual end".
+        endSession(
+          _afkReason == AfkReason.background
+              ? 'APP BACKGROUNDED'
+              : 'USER MOVEMENT',
+        );
+      }
       return;
     }
 
@@ -396,7 +447,21 @@ class CognitiveEngineProvider extends ChangeNotifier
 
       if (triggerAlert) {
         _isBreakRecommended = true;
+        _secondsSinceBreakRecommended = 0;
         _triggerDoubleVibration();
+      }
+    } else {
+      // Off-protocol escalation: the user keeps working past the break advice.
+      // Nudge harder at 5' and 10', then abort the session at 15'.
+      _secondsSinceBreakRecommended += tickDurationSeconds;
+      if (_secondsSinceBreakRecommended == _protocolWarn1Seconds) {
+        _advisoryMessage = "Break overdue. Interrupt now.";
+        _triggerDoubleVibration();
+      } else if (_secondsSinceBreakRecommended == _protocolWarn2Seconds) {
+        _advisoryMessage = "OFF-PROTOCOL: stop the session and recover.";
+        _triggerDoubleVibration();
+      } else if (_secondsSinceBreakRecommended >= _protocolAbortSeconds) {
+        endSession('OFF PROTOCOL');
       }
     }
   }
@@ -498,6 +563,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _isBreakRecommended = false;
     _isFocusRecommended = false;
     _isMaxBreakReached = false;
+    _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
     _advisoryMessage = "Recovery initiated.";
     _currentState = EngineState.breakMode;
@@ -512,6 +578,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _biometrics.clearSteps();
     _isBreakRecommended = false;
     _isFocusRecommended = false;
+    _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
     _advisoryMessage = "Session active.";
     _currentState = EngineState.focus;
@@ -562,6 +629,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _isBreakRecommended = false;
     _isFocusRecommended = false;
     _isMaxBreakReached = false;
+    _secondsSinceBreakRecommended = 0;
     _isAfkWarningActive = false;
     _advisoryMessage = "";
 

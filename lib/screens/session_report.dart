@@ -64,6 +64,15 @@ class SessionReportPage extends StatelessWidget {
     } else if (terminationReason == 'NEURAL FATIGUE') {
       badgeColor = colorScheme.secondary;
       badgeIcon = Icons.battery_alert_rounded;
+    } else if (terminationReason == 'OFF PROTOCOL') {
+      badgeColor = colorScheme.error;
+      badgeIcon = Icons.gpp_bad_rounded;
+    } else if (terminationReason == 'USER MOVEMENT') {
+      badgeColor = colorScheme.secondary;
+      badgeIcon = Icons.directions_walk_rounded;
+    } else if (terminationReason == 'APP BACKGROUNDED') {
+      badgeColor = colorScheme.secondary;
+      badgeIcon = Icons.visibility_off_rounded;
     } else {
       badgeColor = colorScheme.primary;
       badgeIcon = Icons.check_circle_rounded;

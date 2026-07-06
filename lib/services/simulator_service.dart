@@ -55,6 +55,10 @@ class ScenarioSimulator {
       } else {
         return 70.0 + rand.nextInt(8);
       }
+    } else if (currentScenario == SimulationScenario.incompleteRecovery) {
+      // Calm but noisy focus HR so the baseline can actually calibrate; the
+      // poor-recovery signal lives in the elevated break HR (see isBreak above).
+      return 65.0 + rand.nextInt(5);
     }
 
     return 65.0;

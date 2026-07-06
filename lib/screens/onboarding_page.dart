@@ -21,13 +21,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _isFinishing = false;
-  late final List<OnboardingData> _pages;
+  static const int _pageCount = 3;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final colorScheme = Theme.of(context).colorScheme;
-    _pages = [
+  /// Slides are rebuilt on demand from the current [ColorScheme]. Building them
+  /// here (instead of caching in a `late final` via didChangeDependencies)
+  /// keeps them theme-correct and avoids a LateInitializationError risk.
+  List<OnboardingData> _buildPages(ColorScheme colorScheme) {
+    return [
       OnboardingData(
         superTitle: 'THE SAFTE™ ENGINE',
         title: 'Clinical-Grade\nProductivity',
@@ -75,7 +75,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _nextPage() {
-    if (_currentPage == _pages.length - 1) {
+    if (_currentPage == _pageCount - 1) {
       _finishOnboarding();
     } else {
       HapticFeedback.lightImpact();
@@ -90,7 +90,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final currentData = _pages[_currentPage];
+    final pages = _buildPages(colorScheme);
+    final currentData = pages[_currentPage];
 
     return Scaffold(
       body: Stack(
@@ -132,7 +133,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     child: AnimatedOpacity(
                       duration: const Duration(milliseconds: 300),
                       opacity:
-                          (_currentPage == _pages.length - 1 || _isFinishing)
+                          (_currentPage == pages.length - 1 || _isFinishing)
                           ? 0.0
                           : 1.0,
                       child: TextButton(
@@ -150,10 +151,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       setState(() => _currentPage = index);
                       HapticFeedback.selectionClick();
                     },
-                    itemCount: _pages.length,
+                    itemCount: pages.length,
                     itemBuilder: (context, index) {
                       return OnboardingSlide(
-                        data: _pages[index],
+                        data: pages[index],
                         isActive: _currentPage == index,
                       );
                     },
@@ -167,7 +168,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     children: [
                       Row(
                         children: List.generate(
-                          _pages.length,
+                          pages.length,
                           (index) => AnimatedContainer(
                             duration: const Duration(milliseconds: 400),
                             curve: Curves.easeOutCubic,
@@ -204,13 +205,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                   ),
                                 )
                               : Icon(
-                                  _currentPage == _pages.length - 1
+                                  _currentPage == pages.length - 1
                                       ? Icons.check_rounded
                                       : Icons.arrow_forward_rounded,
                                   size: 20,
                                 ),
                           label: Text(
-                            _currentPage == _pages.length - 1
+                            _currentPage == pages.length - 1
                                 ? 'START'
                                 : 'NEXT',
                           ),

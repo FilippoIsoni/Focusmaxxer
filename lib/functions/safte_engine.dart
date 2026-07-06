@@ -65,6 +65,13 @@ class SafteEngine {
         .difference(currentSleep.bedTime)
         .inMinutes;
 
+    // Defensive backstop against pathological baselines (malformed dates):
+    // never run an unbounded minute-by-minute loop at boot. DailyBaseline
+    // normalization should keep this in range; this only guards absurd input.
+    if (timeInBedMinutes <= 0 || timeInBedMinutes > 24 * 60) {
+      return reservoirAtBedtime;
+    }
+
     for (int minute = 0; minute < timeInBedMinutes; minute++) {
       final DateTime currentMinuteTime = currentSleep.bedTime.add(
         Duration(minutes: minute),
