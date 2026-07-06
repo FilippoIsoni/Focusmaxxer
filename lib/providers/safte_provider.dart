@@ -59,6 +59,12 @@ class SafteProvider extends ChangeNotifier {
 
   /// Da chiamare DOPO aver scaricato i dati dell'indossabile.
   /// Ritorna TRUE *solo* se è un sonno principale (Nuovo Giorno).
+  ///
+  /// INVARIANT: only call this outside an active focus/break session (today it
+  /// runs solely from bootloader_screen at startup). It mutates the biological
+  /// anchors (_tWake/_tSleep/_baselineReservoir) that the engine reads on every
+  /// tick; mutating them mid-session would shift the fatigue model underneath a
+  /// running session. Add a session guard before calling it from any other path.
   Future<bool> syncWithServer({
     required DateTime sWake,
     required DateTime sSleep,

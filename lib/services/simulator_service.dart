@@ -1,43 +1,4 @@
-import 'dart:async';
 import 'dart:math';
-
-// --- IL MOTORE DEL TEMPO FINTO ---
-class WarpTickerService {
-  double speedMultiplier;
-  Timer? timer;
-  StreamController<void> controller = StreamController<void>.broadcast();
-
-  // Costruttore
-  WarpTickerService({this.speedMultiplier = 60.0});
-
-  // Avvia il timer finto
-  void start(Duration interval) {
-    stop();
-
-    int realMilliseconds = interval.inMilliseconds;
-    int fakeMilliseconds = (realMilliseconds / speedMultiplier).round();
-
-    if (fakeMilliseconds < 1) fakeMilliseconds = 1;
-
-    timer = Timer.periodic(Duration(milliseconds: fakeMilliseconds), (_) {
-      if (controller.isClosed == false) {
-        controller.add(null);
-      }
-    });
-  }
-
-  void stop() {
-    if (timer != null) {
-      timer!.cancel();
-      timer = null;
-    }
-  }
-
-  void dispose() {
-    stop();
-    controller.close();
-  }
-}
 
 // --- GENERATORE DI SCENARI ---
 enum SimulationScenario {

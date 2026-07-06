@@ -54,9 +54,12 @@ class AnalyticsTab extends StatelessWidget {
                   delegate: SliverChildBuilderDelegate((context, index) {
                     final session = sessions[index];
                     final durationMins = session.durationSeconds ~/ 60;
-                    final sessionDate = DateTime.parse(session.date);
-                    final dateStr =
-                        "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year}";
+                    // Defensive parse: a malformed date in the DB must not
+                    // crash the whole Analytics screen.
+                    final sessionDate = DateTime.tryParse(session.date);
+                    final dateStr = sessionDate != null
+                        ? "${sessionDate.day.toString().padLeft(2, '0')}/${sessionDate.month.toString().padLeft(2, '0')}/${sessionDate.year}"
+                        : "--/--/----";
 
                     Color reasonColor;
                     IconData reasonIcon;
@@ -100,7 +103,11 @@ class AnalyticsTab extends StatelessWidget {
                                             ),
                                           )
                                           .toList();
-                                } catch (_) {}
+                                } catch (e) {
+                                  debugPrint(
+                                    'Analytics: HR timeline parse failed: $e',
+                                  );
+                                }
 
                                 // FIX: Routing corretto utilizzando il parametro 'page:'
                                 Navigator.push(

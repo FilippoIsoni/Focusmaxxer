@@ -152,11 +152,13 @@ class _ReadinessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
 
-    final double rawScore = safte.getStateAt(clock.currentTime).effectiveness;
-    final double score = rawScore.floorToDouble();
+    // Rebuild only when the integer readiness score changes, not on every
+    // clock tick — the SAFTE effectiveness moves slowly.
+    final double score = context.select<GlobalClockProvider, double>(
+      (clock) => safte.getStateAt(clock.currentTime).effectiveness.floorToDouble(),
+    );
 
     final dynamicColor = SafteSemanticInterpreter.getEffectivenessColor(
       score,
@@ -268,12 +270,35 @@ class _KeyFactorsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final clock = context.watch<GlobalClockProvider>();
+    final colorScheme = theme.colorScheme;
     final safte = context.read<SafteProvider>();
     final engine = context.read<CognitiveEngineProvider>();
 
-    final currentState = safte.getStateAt(clock.currentTime);
-    final double reservoirRatio = currentState.reservoir / engine.capacityMax;
+    // Select only the displayed (bucketed) status values so the tiles rebuild
+    // when a status changes, not on every clock tick.
+    final (
+      String reservoirStatus,
+      Color reservoirColor,
+      String circadianStatus,
+      String inertiaStatus,
+    ) = context.select<GlobalClockProvider, (String, Color, String, String)>((
+      clock,
+    ) {
+      final s = safte.getStateAt(clock.currentTime);
+      final reservoirRatio = s.reservoir / engine.capacityMax;
+      return (
+        SafteSemanticInterpreter.getReservoirStatus(reservoirRatio),
+        SafteSemanticInterpreter.getEffectivenessColor(
+          reservoirRatio * 100,
+          colorScheme,
+        ),
+        SafteSemanticInterpreter.getCircadianStatus(s.circadianValue),
+        SafteSemanticInterpreter.getInertiaStatus(
+          safte.wakeupTime,
+          clock.currentTime,
+        ),
+      );
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -292,22 +317,15 @@ class _KeyFactorsSection extends StatelessWidget {
           icon: Icons.battery_charging_full_rounded,
           title: 'Homeostatic Reservoir',
           description: 'Current cognitive battery capacity.',
-          statusLabel: SafteSemanticInterpreter.getReservoirStatus(
-            reservoirRatio,
-          ),
-          statusColor: SafteSemanticInterpreter.getEffectivenessColor(
-            reservoirRatio * 100,
-            theme.colorScheme,
-          ),
+          statusLabel: reservoirStatus,
+          statusColor: reservoirColor,
         ),
         const SizedBox(height: 12),
         _ContributorTile(
           icon: Icons.waves_rounded,
           title: 'Circadian Rhythm',
           description: 'Hormonal alignment with time of day.',
-          statusLabel: SafteSemanticInterpreter.getCircadianStatus(
-            currentState.circadianValue,
-          ),
+          statusLabel: circadianStatus,
           statusColor: theme.colorScheme.tertiary,
         ),
         const SizedBox(height: 12),
@@ -315,10 +333,7 @@ class _KeyFactorsSection extends StatelessWidget {
           icon: Icons.snooze_rounded,
           title: 'Sleep Inertia',
           description: 'Post-awakening cognitive penalty.',
-          statusLabel: SafteSemanticInterpreter.getInertiaStatus(
-            safte.wakeupTime,
-            clock.currentTime,
-          ),
+          statusLabel: inertiaStatus,
           statusColor: theme.colorScheme.secondary,
         ),
       ],
@@ -412,16 +427,19 @@ class _FloatingStartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final clock = context.watch<GlobalClockProvider>();
     final safte = context.read<SafteProvider>();
-    final engine = context.watch<CognitiveEngineProvider>();
+    final engine = context.read<CognitiveEngineProvider>();
 
-    final double currentScore = safte
-        .getStateAt(clock.currentTime)
-        .effectiveness;
-    final bool isEngineReady =
-        currentScore >= SafteSemanticInterpreter.warningThreshold;
-    final bool isLimitReached = engine.isDailyLimitReached;
+    // Rebuild only when readiness crosses the start threshold or the daily
+    // limit flips — not on every clock tick.
+    final bool isEngineReady = context.select<GlobalClockProvider, bool>(
+      (clock) =>
+          safte.getStateAt(clock.currentTime).effectiveness >=
+          SafteSemanticInterpreter.warningThreshold,
+    );
+    final bool isLimitReached = context.select<CognitiveEngineProvider, bool>(
+      (e) => e.isDailyLimitReached,
+    );
 
     Color buttonColor;
     Color textColor;

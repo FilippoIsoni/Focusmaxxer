@@ -55,17 +55,23 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 3. SCRIVE in memoria che l'utente ha fatto il login
-  Future<void> login(String username, String password) async {
-    final impactService = ImpactApiService();
-    final statusCode = await impactService.getAndStoreTokens(username, password);
+  // 3. Persists the logged-in flag after a successful token exchange.
+  //    The [api] instance is passed in by the caller (the DI-registered
+  //    singleton) so we reuse the same service — with its onSessionExpired
+  //    callback already wired — instead of spawning a second instance.
+  Future<void> login(
+    ImpactApiService api,
+    String username,
+    String password,
+  ) async {
+    final statusCode = await api.getAndStoreTokens(username, password);
 
     if (statusCode == 200) {
-      await prefs.setBool('isLoggedIn', true);  
+      await prefs.setBool('isLoggedIn', true);
       status = AuthStatus.authenticated;
       notifyListeners();
     } else {
-      throw Exception('Credenziali errate (HTTP $statusCode)');
+      throw Exception('Login failed (HTTP $statusCode)');
     }
   }
 

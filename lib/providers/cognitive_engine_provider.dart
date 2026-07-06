@@ -65,6 +65,11 @@ class CognitiveEngineProvider extends ChangeNotifier
   late DateTime _internalClock;
   bool _isDisposed = false;
 
+  // Commit guards: ensure the active session buffer is persisted at most once,
+  // even if endSession/_triggerDailyLimit and a `detached` lifecycle event race.
+  bool _isCommitting = false;
+  bool _sessionCommitted = false;
+
   // Segment Counters (Used only for current phase logic, NOT for final reporting)
   int _targetSegmentSeconds = 0;
   int _targetBreakSeconds = 0;
@@ -177,8 +182,10 @@ class CognitiveEngineProvider extends ChangeNotifier
         notifyListeners();
       }
     } else if (state == AppLifecycleState.detached) {
-      // Strict Mode Brutal Termination: Evaluates buffer validity and saves if > 10 mins
-      // Fire-and-forget: detached is best-effort on modern Android
+      // Strict Mode Brutal Termination: Evaluates buffer validity and saves if > 10 mins.
+      // Fire-and-forget: detached is best-effort on modern Android (the framework
+      // does not await this callback). Safe to race with endSession because
+      // _commitSessionIfValid is idempotent and will not double-commit.
       _commitSessionIfValid();
     }
   }
@@ -268,6 +275,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
     // Initialize the volatile data sandbox
     _activeBuffer = ActiveSessionBuffer(startTime: _internalClock);
+    _sessionCommitted = false;
     _biometrics.resetSession();
 
     _currentState = EngineState.analyzingBaseline;
@@ -433,14 +441,28 @@ class CognitiveEngineProvider extends ChangeNotifier
   /// Evaluates the volatile buffer and commits it to persistent storage ONLY if validated.
   /// IMPORTANT: This is async — always await it so the DB write completes before
   /// the state machine resets and destroys the buffer.
+  ///
+  /// Idempotent and re-entrancy safe: a given buffer is persisted at most once.
+  /// commitValidatedSession is NOT idempotent (it increments the daily counter),
+  /// so without these guards a race between endSession and a `detached` event
+  /// could double-count the same session.
   Future<void> _commitSessionIfValid() async {
-    if (_activeBuffer != null && _activeBuffer!.isValidated) {
-      final finalSession = _activeBuffer!.toCompletedSession(
+    if (_isCommitting || _sessionCommitted) return;
+
+    final buffer = _activeBuffer;
+    if (buffer == null || !buffer.isValidated) return;
+
+    _isCommitting = true;
+    try {
+      final finalSession = buffer.toCompletedSession(
         currentEffectiveness,
         _terminationReason,
       );
       // Await the full async chain: Repository.saveSession -> DAO.insertSession
       await analytics.commitValidatedSession(finalSession);
+      _sessionCommitted = true;
+    } finally {
+      _isCommitting = false;
     }
   }
 
@@ -548,6 +570,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
     // Destroy the sandbox buffer to prevent memory leaks and clear session data
     _activeBuffer = null;
+    _sessionCommitted = false;
     notifyListeners();
   }
 

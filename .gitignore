@@ -50,3 +50,6 @@ app.*.map.json
 **/linux/flutter/generated_plugin_registrant.*
 **/windows/flutter/generated_plugin_registrant.*
 .flutter-plugins
+
+# Local orientation file: kept out of the repo (must never land on main).
+CLAUDE.md

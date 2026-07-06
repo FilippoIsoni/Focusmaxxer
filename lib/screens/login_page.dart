@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/impact_api_service.dart';
 import '../utils/dashboard_helpers.dart'; // Router
 import 'bootloader_screen.dart';
 
@@ -40,6 +41,7 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await context.read<AuthProvider>().login(
+        context.read<ImpactApiService>(),
         _emailController.text.trim(),
         _passwordController.text,
       );

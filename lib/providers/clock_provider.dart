@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-/// Sorgente universale del tempo. Sostituisce il WarpTickerService.
+/// Universal time source (replaces the previous fake-time ticker).
 class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
   late DateTime _currentTime;
   Timer? _timer;

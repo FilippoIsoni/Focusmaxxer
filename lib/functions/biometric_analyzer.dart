@@ -128,7 +128,10 @@ class BiometricAnalyzer {
 
   /// Evaluates if the physiological recovery during the Break Mode is insufficient.
   bool isRecoveryIncomplete() {
-    if (_window1Min.isEmpty) return false;
+    // Consistent with currentStressIndex: without an established baseline
+    // (muBase=0) the judgement is unreliable, so we do not flag incomplete
+    // recovery.
+    if (_window1Min.isEmpty || rawSigmaBase == double.infinity) return false;
     final double windowAvg =
         _window1Min.reduce((a, b) => a + b) / _window1Min.length;
     final double zScore = (windowAvg - muBase) / sigmaBase;

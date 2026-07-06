@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -18,7 +17,9 @@ class BreakModePage extends StatefulWidget {
 class _BreakModePageState extends State<BreakModePage>
     with SingleTickerProviderStateMixin {
   bool _isNavigating = false;
-  late CognitiveEngineProvider _engineRef;
+  // Nullable: it is only assigned in a post-frame callback, so dispose() must
+  // tolerate the widget being torn down before the first frame runs.
+  CognitiveEngineProvider? _engineRef;
   late AnimationController _breathController;
 
   @override
@@ -30,27 +31,30 @@ class _BreakModePageState extends State<BreakModePage>
     )..repeat(reverse: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _engineRef = context.read<CognitiveEngineProvider>();
-      _engineRef.addListener(_checkAutoRoute);
+      if (!mounted) return;
+      final engine = context.read<CognitiveEngineProvider>();
+      _engineRef = engine;
+      engine.addListener(_checkAutoRoute);
     });
   }
 
   @override
   void dispose() {
     _breathController.dispose();
-    _engineRef.removeListener(_checkAutoRoute);
+    _engineRef?.removeListener(_checkAutoRoute);
     super.dispose();
   }
 
   void _checkAutoRoute() {
-    if (_isNavigating || !mounted) return;
+    final engine = _engineRef;
+    if (engine == null || _isNavigating || !mounted) return;
 
-    if (_engineRef.isMaxBreakReached) {
+    if (engine.isMaxBreakReached) {
       _isNavigating = true;
       HapticFeedback.heavyImpact();
-      final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
+      final duration = Duration(seconds: engine.sessionTotalFocusSeconds);
       // Await endSession so the DB write completes before we navigate away.
-      _engineRef.endSession('NEURAL FATIGUE').then((_) {
+      engine.endSession('NEURAL FATIGUE').then((_) {
         if (!mounted) return;
         Navigator.of(context).pushReplacement(
           ImmersiveRoute(
@@ -64,11 +68,10 @@ class _BreakModePageState extends State<BreakModePage>
       return;
     }
 
-    if (_engineRef.currentState == EngineState.sessionEnded) {
+    if (engine.currentState == EngineState.sessionEnded) {
       _isNavigating = true;
-      final duration = Duration(seconds: _engineRef.sessionTotalFocusSeconds);
-      final reason = _engineRef.terminationReason;
-      // FIX COERENZA: ImmersiveRoute
+      final duration = Duration(seconds: engine.sessionTotalFocusSeconds);
+      final reason = engine.terminationReason;
       Navigator.of(context).pushReplacement(
         ImmersiveRoute(
           page: SessionReportPage(
