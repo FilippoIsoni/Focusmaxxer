@@ -74,7 +74,8 @@ class CognitiveEngineProvider extends ChangeNotifier
   static const int _dailyLimitLingerSeconds = 2; // Show the cap screen briefly.
 
   // Catch-up cap: at most 30 virtual minutes (360 ticks) are replayed per
-  // resume. A larger jump means a long absence and is handled as a void session.
+  // resume. A larger jump means a long absence: a running focus/break session is
+  // voided (off-protocol), while calibration holds its anomaly overlay instead.
   static const int maxCatchupTicks = 360;
 
   // Off-protocol escalation: nudge at 5 and 10 minutes past the break advice,

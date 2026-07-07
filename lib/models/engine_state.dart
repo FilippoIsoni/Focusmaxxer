@@ -13,14 +13,14 @@
 ///   idle ──startSession──▶ idle                   (daily cap already reached)
 ///
 ///   analyzingBaseline ──after 3 min──▶ focus
-///   analyzingBaseline ──AFK timeout──▶ sessionEnded
+///   analyzingBaseline ──AFK/anomaly──▶ (overlay held; user picks restart/abort → idle)
 ///
 ///   focus ──manual break──▶ breakMode
 ///   focus ──daily cap hit──▶ dailyLimitReached
-///   focus ──off-protocol / AFK timeout──▶ sessionEnded
+///   focus ──off-protocol (15' overdue / long absence) / AFK timeout──▶ sessionEnded
 ///
 ///   breakMode ──manual resume──▶ focus
-///   breakMode ──manual end──▶ sessionEnded
+///   breakMode ──manual end / long absence (off-protocol)──▶ sessionEnded
 ///
 ///   inhibited ─────────▶ idle              (resetEngine)
 ///   dailyLimitReached ──after 2 s──▶ sessionEnded

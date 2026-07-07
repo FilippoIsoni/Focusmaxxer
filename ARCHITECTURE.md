@@ -94,7 +94,9 @@ fatigue model reflects the real elapsed gap.
 
 `CognitiveEngineProvider` subscribes to the clock. On each notification it computes how many
 whole ticks have elapsed and **replays** them (catch‑up), capped at `maxCatchupTicks`
-(30 virtual minutes); a larger jump means a long absence and voids the session.
+(30 virtual minutes, applied to both focus and break). A larger jump means a long absence: a
+running focus/break session is voided (off‑protocol), while during calibration the anomaly
+overlay is held instead.
 
 ```mermaid
 flowchart LR
@@ -121,13 +123,14 @@ stateDiagram-v2
     [*] --> idle
     idle --> analyzingBaseline: startSession (readiness OK)
     idle --> inhibited: startSession (readiness critical)
+    idle --> idle: startSession (daily cap already reached)
     analyzingBaseline --> focus: after 3 min (baseline locked)
-    analyzingBaseline --> sessionEnded: AFK timeout
+    analyzingBaseline --> idle: calibration anomaly → restart / abort
     focus --> breakMode: manual break
     focus --> dailyLimitReached: daily cap hit
-    focus --> sessionEnded: off‑protocol / AFK timeout
+    focus --> sessionEnded: off‑protocol (15′ overdue / long absence) / AFK timeout (60 s)
     breakMode --> focus: manual resume
-    breakMode --> sessionEnded: manual end
+    breakMode --> sessionEnded: manual end / long absence (off‑protocol)
     inhibited --> idle: resetEngine
     dailyLimitReached --> sessionEnded: after 2 s
     sessionEnded --> idle: resetEngine
@@ -136,6 +139,14 @@ stateDiagram-v2
 - **analyzingBaseline** — capturing the calm resting HR to set the per‑session baseline.
 - **inhibited** — focus refused because SAFTE readiness is critically low.
 - **dailyLimitReached** — the 4‑hour daily deep‑work cap (`SessionRulesEngine.dailyMaxSeconds`).
+- **AFK during analyzingBaseline is not a timeout** — unlike in `focus`, an AFK/anomaly
+  during calibration holds the "calibration failed" overlay open (the tick loop never
+  auto‑dismisses it); the user resolves it by restarting or aborting, both landing back in
+  `idle`.
+- **breakMode has no AFK detection** — neither movement (steps) nor backgrounding raises the
+  AFK overlay during a break, so the user may step away freely. The only involuntary exit is
+  the catch‑up cap: a background→resume gap beyond 30 virtual minutes voids the break as
+  off‑protocol (same rule as focus).
 
 ---
 
@@ -149,19 +160,22 @@ sequenceDiagram
     participant Engine as CognitiveEngineProvider
     participant Sim as ScenarioSimulator
     participant Bio as BiometricAnalyzer
-    participant Safte as SafteProvider/Engine
-    participant Rules as SessionRulesEngine
+    participant Buffer as ActiveSessionBuffer
     participant UI as Screens
 
     Clock->>Engine: tick (virtual +5 s)
-    Engine->>Sim: getSimulatedHR / getSimulatedSteps
+    Engine->>Sim: getSimulatedSteps / getSimulatedHR
     Engine->>Bio: addDataPoint(hr, steps)
-    Engine->>Safte: getStateAt(now) → readiness %
-    Engine->>Rules: calculateNextSegment(readiness, ...)
-    Bio-->>Engine: stress index · AFK
-    Engine->>Engine: update EngineState + advisory
-    Engine-->>UI: notifyListeners()
+    Engine->>Buffer: recordTick(state, hr)
+    Bio-->>Engine: stepsLastMinute · isAcuteOverload · isRecoveryIncomplete
+    Engine->>Engine: run state handler → update EngineState + advisory
+    Engine-->>UI: notifyListeners() (once per clock notification)
 ```
+
+**Not per tick:** the segment durations come from `SessionRulesEngine.calculateNextSegment`
+(which reads the SAFTE readiness via `SafteProvider.getStateAt`) and are computed only at
+**segment boundaries** — `startSession` and `manualTransitionToFocus` — not inside the tick
+loop. The `BiometricAnalyzer` derivations above are consulted by the active state handler.
 
 When a session ends and is **validated** (> 10 min of focus), the volatile
 `ActiveSessionBuffer` is frozen into a `CognitiveSession` and persisted once (idempotently)
