@@ -2,9 +2,11 @@ import '../models/session_data.dart';
 import 'app_database.dart';
 import 'session_dao.dart';
 
-/// Repository Pattern: Isola la logica di accesso ai dati dal resto dell'app.
-/// I Provider dialogheranno con questo repository senza sapere se i dati
-/// provengono da Floor (SQLite), da una cache o dal cloud.
+/// Repository that isolates data-access logic from the rest of the app.
+///
+/// Layer: data. Providers talk to this repository without knowing whether the
+/// data comes from Floor (SQLite), a cache, or the cloud.
+/// Collaborators: [AppDatabase], [SessionDao].
 class SessionRepository {
   final AppDatabase _database;
   late final SessionDao _dao;
@@ -13,17 +15,17 @@ class SessionRepository {
     _dao = _database.sessionDao;
   }
 
-  /// Recupera tutte le sessioni storiche.
+  /// Returns all stored historical sessions.
   Future<List<CognitiveSession>> getAllSessions() async {
     return await _dao.findAllSessions();
   }
 
-  /// Salva una nuova sessione e restituisce l'ID generato dal database.
+  /// Persists a new session and returns the database-generated ID.
   Future<int> saveSession(CognitiveSession session) async {
     return await _dao.insertSession(session);
   }
 
-  /// Elimina una sessione specifica.
+  /// Deletes a specific session.
   Future<void> deleteSession(CognitiveSession session) async {
     await _dao.deleteSession(session);
   }
