@@ -433,7 +433,12 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ),
                         ),
-                        const SettingsGroup(children: [SimulatorSettingsRow()]),
+                        const SettingsGroup(
+                          children: [
+                            SimulationSpeedRow(),
+                            SimulatorSettingsRow(),
+                          ],
+                        ),
                         const SizedBox(height: 48),
 
                         Padding(

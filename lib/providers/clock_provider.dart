@@ -14,8 +14,13 @@ class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
   // ==========================================
 
   /// How much faster virtual time runs than real time. Injected as `60.0` in
-  /// main.dart, so 1 real second advances the virtual clock by 60 seconds.
-  final double speedMultiplier;
+  /// main.dart (the initial default), so 1 real second advances the virtual
+  /// clock by 60 seconds. Adjustable at runtime via [setSpeedMultiplier] — the
+  /// demo control in the profile changes the playback pace on the fly.
+  double _speedMultiplier;
+
+  /// Current virtual/real time ratio; every timing computation reads this.
+  double get speedMultiplier => _speedMultiplier;
 
   /// Virtual seconds added per tick. Fixed at 5s to match the telemetry
   /// resolution the engine and [BiometricAnalyzer] expect (tickDurationSeconds).
@@ -35,10 +40,24 @@ class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// The current virtual time; every consumer reads simulated "now" from here.
   DateTime get currentTime => _currentTime;
 
-  GlobalClockProvider({this.speedMultiplier = 1.0, this.virtualTickSeconds = 5}) {
+  GlobalClockProvider({double speedMultiplier = 1.0, this.virtualTickSeconds = 5})
+      : _speedMultiplier = speedMultiplier {
     WidgetsBinding.instance.addObserver(this);
     _currentTime = DateTime.now();
     _startClock();
+  }
+
+  /// Changes how fast virtual time runs and immediately rebuilds the tick timer
+  /// at the new interval. No-op if the value is unchanged.
+  ///
+  /// Safe to call while a session is running: each notify still advances virtual
+  /// time by exactly [virtualTickSeconds], so the engine keeps seeing one tick
+  /// per notify (no catch-up storm) regardless of the new pace.
+  void setSpeedMultiplier(double value) {
+    if (value == _speedMultiplier) return;
+    _speedMultiplier = value;
+    _startClock(); // Cancels + recreates Timer.periodic at the new interval.
+    notifyListeners();
   }
 
   // ==========================================
@@ -53,7 +72,7 @@ class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     // Convert the desired virtual tick into the real interval to wait for it.
     final int realMilliseconds =
-        ((virtualTickSeconds * 1000) / speedMultiplier).round();
+        ((virtualTickSeconds * 1000) / _speedMultiplier).round();
 
     // Clamp to a minimum of 1ms so an extreme multiplier can never produce a
     // zero-duration timer (which would busy-loop / throw).
@@ -88,7 +107,7 @@ class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
         final int realMissedSeconds =
             DateTime.now().difference(_lastBackgroundTime!).inSeconds;
         final int virtualMissedSeconds =
-            (realMissedSeconds * speedMultiplier).round();
+            (realMissedSeconds * _speedMultiplier).round();
 
         _currentTime = _currentTime.add(
           Duration(seconds: virtualMissedSeconds),

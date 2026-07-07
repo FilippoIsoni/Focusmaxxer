@@ -19,11 +19,18 @@ class BiometricRing extends StatefulWidget {
   final double progressPercentage;
   final double stressIndex; // 0.0 -> 1.0 (drives the ring color only).
 
+  /// True while the session is still calibrating its baseline. The engine flips
+  /// to the focus state at 3 min, but calibration runs for the full 10-minute
+  /// window — so the ring keeps the calibration cue (color + label, no stress
+  /// nudge) until then, matching the top banner. Only affects the focus state.
+  final bool isCalibrating;
+
   const BiometricRing({
     super.key,
     required this.state,
     required this.progressPercentage,
     required this.stressIndex,
+    this.isCalibrating = false,
   });
 
   @override
@@ -77,7 +84,9 @@ class _BiometricRingState extends State<BiometricRing>
   Color _getStateColor(ColorScheme colorScheme) {
     switch (widget.state) {
       case EngineState.focus:
-        return colorScheme.primary;
+        // Still calibrating → keep the tertiary calibration hue for the whole
+        // baseline window; only true deep work uses the primary accent.
+        return widget.isCalibrating ? colorScheme.tertiary : colorScheme.primary;
       case EngineState.analyzingBaseline:
         return colorScheme.tertiary;
       case EngineState.breakMode:
@@ -95,7 +104,7 @@ class _BiometricRingState extends State<BiometricRing>
   String _getStateLabel() {
     switch (widget.state) {
       case EngineState.focus:
-        return "DEEP FOCUS";
+        return widget.isCalibrating ? "CALIBRATING" : "DEEP FOCUS";
       case EngineState.analyzingBaseline:
         return "CALIBRATING";
       case EngineState.breakMode:
@@ -116,7 +125,9 @@ class _BiometricRingState extends State<BiometricRing>
   /// their flat state color.
   Color _resolveActiveColor(ThemeData theme) {
     final base = _getStateColor(theme.colorScheme);
-    if (widget.state != EngineState.focus) return base;
+    // No stress nudge outside focus, nor while still calibrating (baseline not
+    // settled → stress isn't yet a reliable signal).
+    if (widget.state != EngineState.focus || widget.isCalibrating) return base;
 
     if (widget.stressIndex >= 1.0) return theme.colorScheme.error;
     return Color.lerp(base, theme.colorScheme.secondary, widget.stressIndex) ??

@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/clock_provider.dart';
 import '../providers/cognitive_engine_provider.dart';
 import '../services/simulator_service.dart';
 
@@ -267,7 +268,7 @@ class SimulatorSettingsRow extends StatelessWidget {
 
   /// Turns a camelCase enum name into a spaced, Title-Cased label for display.
   ///
-  /// Example: `incompleteRecovery` -> `Incomplete Recovery`. The lookbehind
+  /// Example: `partialRecovery` -> `Partial Recovery`. The lookbehind
   /// regex `(?<=[a-z])[A-Z]` matches each uppercase letter that directly follows
   /// a lowercase one — i.e. every internal camelCase word boundary — and inserts
   /// a space before it. The first character is then upper-cased for Title Case.
@@ -276,5 +277,80 @@ class SimulatorSettingsRow extends StatelessWidget {
     final String spaced =
         text.replaceAllMapped(camelBoundary, (m) => ' ${m.group(0)}');
     return spaced[0].toUpperCase() + spaced.substring(1);
+  }
+}
+
+/// Dropdown row that sets the simulation playback speed (virtual/real ratio).
+///
+/// A demo affordance: it reads/writes [GlobalClockProvider.speedMultiplier], so
+/// the presenter can slow the clock down to watch the biometric ring evolve in
+/// detail, or keep it fast to fast-forward through a session. Mirrors
+/// [SimulatorSettingsRow] visually so both dev controls read as one kit.
+class SimulationSpeedRow extends StatelessWidget {
+  const SimulationSpeedRow({super.key});
+
+  /// Preset multipliers offered in the dropdown. 60× is the app default;
+  /// 1×/2×/10× trade real-time cost for finer on-screen observation of the ring.
+  static const List<double> _speedPresets = [1.0, 2.0, 10.0, 60.0];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final double currentSpeed =
+        context.watch<GlobalClockProvider>().speedMultiplier;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.speed_rounded, color: colorScheme.tertiary, size: 22),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Simulation Speed",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withAlpha(150),
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<double>(
+                    value: currentSpeed,
+                    isExpanded: true,
+                    dropdownColor: colorScheme.surfaceContainerHighest,
+                    icon: Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: colorScheme.tertiary,
+                    ),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    items: _speedPresets.map((speed) {
+                      return DropdownMenuItem(
+                        value: speed,
+                        child: Text("${speed.toInt()}×"),
+                      );
+                    }).toList(),
+                    onChanged: (double? newValue) {
+                      // Ignore the "cleared" (null) case; only real picks apply.
+                      if (newValue != null) {
+                        HapticFeedback.lightImpact();
+                        context.read<GlobalClockProvider>().setSpeedMultiplier(
+                          newValue,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

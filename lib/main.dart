@@ -24,13 +24,13 @@ import 'screens/bootloader_screen.dart';
 /// Baked-in simulation/debug configuration.
 ///
 /// The app currently runs against a deterministic HR/steps simulator rather
-/// than real sensors, so these two knobs are fixed at build time (not user
-/// settings): [_kSpeedMultiplier] compresses wall-clock time so a full day of
-/// SAFTE dynamics plays out in minutes, and [_kSimulationScenario] selects the
-/// biometric storyline the simulator replays.
+/// than real sensors. [_kSpeedMultiplier] compresses wall-clock time so a full
+/// day of SAFTE dynamics plays out in minutes; it is the *initial default* and
+/// can be changed at runtime from the profile's developer tools. Likewise
+/// [_kSimulationScenario] is the boot storyline, swappable via the same panel.
 const double _kSpeedMultiplier = 60.0; // 1 real second = 60 virtual seconds.
 const int _kVirtualTickSeconds = 5; // Virtual clock resolution per tick.
-const SimulationScenario _kSimulationScenario = SimulationScenario.acuteStress;
+const SimulationScenario _kSimulationScenario = SimulationScenario.steadyFocus;
 
 /// Local database file name.
 ///

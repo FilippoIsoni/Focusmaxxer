@@ -205,6 +205,7 @@ class _FocusModePageState extends State<FocusModePage> {
             state: engine.currentState,
             progressPercentage: engine.currentSegmentProgress,
             stressIndex: engine.currentStressIndex,
+            isCalibrating: engine.isCalibrationPhase,
           ),
           const SizedBox(height: 48),
           const _SessionTimerDisplay(),

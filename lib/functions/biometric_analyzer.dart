@@ -32,12 +32,13 @@ class BiometricAnalyzer {
 
   // --- Clinical thresholds ---
 
-  /// A std-dev below this is treated as a flat-lined / disconnected sensor and
-  /// discarded, so noise-free garbage never becomes the baseline.
-  static const double _minValidSigma = 0.5;
-
   /// Floor applied to the baseline std-dev. Prevents a tiny sigma from making
-  /// the Z-score hypersensitive (dividing by a near-zero spread).
+  /// the Z-score hypersensitive (dividing by a near-zero spread). This floor is
+  /// also what makes a "flat sensor" guard unnecessary: even a near-zero raw
+  /// sigma is clamped here, so a disconnected-sensor baseline can never turn the
+  /// Z-score pathological. (A genuine disconnection check — e.g. rejecting a
+  /// near-flat whole pool, or a median-based baseline — is out of scope while
+  /// there is no real sensor; the simulator never produces a flat signal.)
   static const double _defaultSigma = 3.0;
 
   /// A tick counts as "acute overload" once its HR sits at or above +2σ.
@@ -72,6 +73,10 @@ class BiometricAnalyzer {
   final List<double> _window1Min = []; // Short window for recovery checks.
   final List<int> _stepsWindow1Min = []; // Steps over the last minute (AFK).
 
+  /// Focus seconds elapsed at the last ingested sample. Used to suppress stress
+  /// detection until the baseline has settled (the calibration window).
+  int _lastElapsedFocusSeconds = 0;
+
   /// Fully resets all windows and the baseline for a new session or cycle.
   void resetSession() {
     _window10Min.clear();
@@ -79,6 +84,7 @@ class BiometricAnalyzer {
     _window1Min.clear();
     _stepsWindow1Min.clear();
     rawSigmaBase = double.infinity;
+    _lastElapsedFocusSeconds = 0;
   }
 
   /// Clears only the baseline-search pool, e.g. when a new focus segment must
@@ -90,6 +96,7 @@ class BiometricAnalyzer {
 
   /// Ingests one HR + steps sample and trims every window back to its max size.
   void addDataPoint(double hr, int steps, int elapsedFocusSeconds) {
+    _lastElapsedFocusSeconds = elapsedFocusSeconds;
     _pushBounded(_window1Min, hr, _oneMinTicks);
     _pushBounded(_window3Min, hr, _threeMinTicks);
     _pushBounded(_stepsWindow1Min, steps, _oneMinTicks);
@@ -128,9 +135,6 @@ class BiometricAnalyzer {
           _baselineMinTicks;
       final double sigma = math.sqrt(variance);
 
-      // Skip perfectly flat clusters — they usually mean a disconnected wearable.
-      if (sigma < _minValidSigma) continue;
-
       if (sigma < bestRawSigma) {
         bestRawSigma = sigma;
         bestMu = mu;
@@ -151,6 +155,12 @@ class BiometricAnalyzer {
   double get currentStressIndex {
     // No data or no baseline yet → not stressed (stay silent during calibration).
     if (_window3Min.isEmpty || rawSigmaBase == double.infinity) return 0.0;
+
+    // Still within the calibration window: the baseline keeps re-optimizing and
+    // is not settled, so a transient rise here isn't a reliable stress signal.
+    // Suppress detection until calibration completes (mirrors the baseline pool
+    // window). This also keeps the ring/fail-safe quiet during calibration.
+    if (_lastElapsedFocusSeconds < _baselineWindowSeconds) return 0.0;
 
     // Count how many recent ticks sit at or above the overload Z-score.
     int anomalousCount = 0;

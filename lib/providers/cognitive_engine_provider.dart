@@ -165,9 +165,13 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   SimulationScenario get activeScenario => _scenarioSimulator.currentScenario;
 
-  /// Determines if the AFK condition happened during the critical baseline calibration phase
-  bool get isCalibrationAnomaly =>
-      _isAfkWarningActive && _currentState == EngineState.analyzingBaseline;
+  /// True when an interruption (movement / backgrounding) happens while the
+  /// baseline is still calibrating. Uses the full 10-minute calibration window
+  /// ([isCalibrationPhase]), not just the analyzingBaseline state (3 min): the
+  /// baseline keeps re-optimizing until 10 min, so an interruption anywhere in
+  /// that window compromises it and must offer RESTART/ABORT rather than a plain
+  /// AFK timeout.
+  bool get isCalibrationAnomaly => _isAfkWarningActive && isCalibrationPhase;
 
   /// Safe UI getters proxied through the Active Buffer
   int get sessionTotalFocusSeconds => _activeBuffer?.totalFocusSeconds ?? 0;
@@ -193,7 +197,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     this.clock,
     this.analytics,
     this.hardware, {
-    SimulationScenario scenario = SimulationScenario.optimalFlow,
+    SimulationScenario scenario = SimulationScenario.steadyFocus,
   }) : _scenarioSimulator = ScenarioSimulator(scenario) {
     WidgetsBinding.instance.addObserver(this);
     _internalClock = clock.currentTime;
@@ -202,9 +206,11 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      // Trigger AFK/Anomaly if app is backgrounded
+    if (state == AppLifecycleState.paused) {
+      // Real backgrounding: another app is now on top. NB: the notification
+      // shade and the app switcher emit `inactive`, where the app stays visible,
+      // the clock keeps ticking and data keeps flowing — so those must NOT trip
+      // the AFK/anomaly guard (the clock likewise only stops on `paused`).
       if ((_currentState == EngineState.focus ||
               _currentState == EngineState.analyzingBaseline) &&
           !_isAfkWarningActive) {
@@ -268,14 +274,17 @@ class CognitiveEngineProvider extends ChangeNotifier
       // buffer without bound. Past the cap the session is void.
       if (missedTicks > maxCatchupTicks) {
         _internalClock = clock.currentTime;
-        if (_currentState == EngineState.focus ||
+        if (isCalibrationPhase) {
+          // Still calibrating (analyzingBaseline, or focus before 10 min): the
+          // pause handler already armed the calibration anomaly overlay; keep it
+          // waiting for the user's RESTART/ABORT instead of aborting into a
+          // bogus report.
+          notifyListeners();
+        } else if (_currentState == EngineState.focus ||
             _currentState == EngineState.breakMode) {
-          // Abort the session directly instead of replaying.
+          // Past calibration: a long absence voids the session.
           endSession(TerminationReasons.offProtocol);
         } else {
-          // analyzingBaseline: the paused/inactive handler already armed the
-          // calibration anomaly overlay; keep it waiting for the user's
-          // decision instead of aborting into a bogus report.
           notifyListeners();
         }
         return;
@@ -414,6 +423,10 @@ class CognitiveEngineProvider extends ChangeNotifier
 
   void _handleFocusMode() {
     if (_isAfkWarningActive) {
+      // Within the calibration window an interruption compromises the baseline:
+      // hold for an explicit RESTART/ABORT (like the analyzingBaseline phase)
+      // instead of silently timing out into a session-end.
+      if (isCalibrationPhase) return;
       _afkWarningSeconds += tickDurationSeconds;
       if (_afkWarningSeconds >= afkTimeoutSeconds) {
         // Terminate with a reason that reflects the real cause, so the report
