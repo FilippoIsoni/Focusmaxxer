@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:focusmaxxer/database/app_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:focusmaxxer/main.dart';
@@ -15,7 +16,10 @@ void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     final prefs = await SharedPreferences.getInstance();
-    await tester.pumpWidget(FocusMaxxerApp(prefs: prefs));
+    final database = await $FloorAppDatabase
+        .databaseBuilder('app_database_v3.db')
+        .build();
+    await tester.pumpWidget(FocusMaxxerApp(prefs: prefs, database: database));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);

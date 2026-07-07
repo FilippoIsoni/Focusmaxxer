@@ -2,10 +2,22 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../providers/cognitive_engine_provider.dart';
 
+/// The large animated progress ring at the heart of the focus screen.
+///
+/// Layer: UI helper. Shows the current [EngineState] as a colored, "breathing"
+/// ring around a centered label + percentage. Two things animate independently:
+///   * a slow breathing pulse (always running), and
+///   * the fill fraction / color (which only re-tween when the engine pushes new
+///     data, roughly every tick).
+///
+/// The ring itself is painted by [_HardwareOptimizedRingPainter], which is
+/// driven directly by the pulse animation so the breathing repaints never walk
+/// the widget tree. [EngineState] is re-exported by
+/// [CognitiveEngineProvider], hence the single import.
 class BiometricRing extends StatefulWidget {
   final EngineState state;
   final double progressPercentage;
-  final double stressIndex; // 0.0 -> 1.0 (Solo per il colore)
+  final double stressIndex; // 0.0 -> 1.0 (drives the ring color only).
 
   const BiometricRing({
     super.key,
@@ -20,19 +32,34 @@ class BiometricRing extends StatefulWidget {
 
 class _BiometricRingState extends State<BiometricRing>
     with SingleTickerProviderStateMixin {
+  // Overall square the ring is laid out in.
+  static const double _ringSize = 320.0;
+
+  // Breathing pulse: a fixed, constant cadence for perfectly smooth motion.
+  static const Duration _breathingPeriod = Duration(milliseconds: 2500);
+  static const double _pulseMin = 0.96; // Scale at full exhale...
+  static const double _pulseMax = 1.04; // ...and at full inhale.
+
+  // Data-driven tweens: these fire only when new data arrives, so they never
+  // fight the per-frame breathing repaint.
+  static const Duration _fillTweenDuration = Duration(milliseconds: 400);
+  static const Duration _colorTweenDuration = Duration(milliseconds: 600);
+
+  // ~5% opacity ghost track behind the active ring.
+  static const int _backgroundAlpha = 13;
+
   late AnimationController _breathingController;
   late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    // Velocità fissa e costante per garantire fluidità assoluta
     _breathingController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: _breathingPeriod,
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 0.96, end: 1.04).animate(
+    _pulseAnimation = Tween<double>(begin: _pulseMin, end: _pulseMax).animate(
       CurvedAnimation(
         parent: _breathingController,
         curve: Curves.easeInOutSine,
@@ -46,6 +73,7 @@ class _BiometricRingState extends State<BiometricRing>
     super.dispose();
   }
 
+  /// Base color for the current engine state.
   Color _getStateColor(ColorScheme colorScheme) {
     switch (widget.state) {
       case EngineState.focus:
@@ -63,6 +91,7 @@ class _BiometricRingState extends State<BiometricRing>
     }
   }
 
+  /// Short caption shown inside the ring for the current engine state.
   String _getStateLabel() {
     switch (widget.state) {
       case EngineState.focus:
@@ -81,107 +110,50 @@ class _BiometricRingState extends State<BiometricRing>
     }
   }
 
+  /// Resolves the ring color, applying the "stress nudge" during focus: as the
+  /// stress index rises the ring drifts from its base color toward amber, and
+  /// snaps to the error color once stress saturates (>= 1.0). Other states use
+  /// their flat state color.
+  Color _resolveActiveColor(ThemeData theme) {
+    final base = _getStateColor(theme.colorScheme);
+    if (widget.state != EngineState.focus) return base;
+
+    if (widget.stressIndex >= 1.0) return theme.colorScheme.error;
+    return Color.lerp(base, theme.colorScheme.secondary, widget.stressIndex) ??
+        base;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final targetStateColor = _getStateColor(theme.colorScheme);
+    final activeRingColor = _resolveActiveColor(theme);
+    final backgroundColor = theme.colorScheme.onSurface.withAlpha(_backgroundAlpha);
 
-    // DYNAMIC NUDGE LOGIC: Interpolazione del colore fluida
-    Color activeRingColor = targetStateColor;
-    if (widget.state == EngineState.focus) {
-      if (widget.stressIndex >= 1.0) {
-        activeRingColor = theme.colorScheme.error;
-      } else {
-        activeRingColor =
-            Color.lerp(
-              targetStateColor,
-              theme.colorScheme.secondary,
-              widget.stressIndex,
-            ) ??
-            targetStateColor;
-      }
-    }
-
-    final Color backgroundColor = theme.colorScheme.onSurface.withAlpha(13);
-
-    // Questi Tween scattano SOLO quando i dati cambiano (es. ogni 5 secondi), non interferiscono con il framerate
+    // Outer tween animates the fill fraction; inner tween animates the color.
+    // Both settle in a few hundred ms whenever new data arrives.
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: widget.progressPercentage),
-      duration: const Duration(milliseconds: 400),
+      duration: _fillTweenDuration,
       curve: Curves.easeOut,
       builder: (context, animatedPercentage, _) {
         return TweenAnimationBuilder<Color?>(
           tween: ColorTween(end: activeRingColor),
-          duration: const Duration(milliseconds: 600),
+          duration: _colorTweenDuration,
           curve: Curves.easeOutCubic,
           builder: (context, color, _) {
             final currentColor = color ?? activeRingColor;
-
             return SizedBox(
-              width: 320,
-              height: 320,
+              width: _ringSize,
+              height: _ringSize,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // --- ARCHITETTURA ZERO-LAG ---
-                  // Niente più Transform.scale o AnimatedBuilder nell'albero dei Widget.
-                  // Passiamo l'animazione direttamente al CustomPainter.
-                  SizedBox(
-                    width: 320,
-                    height: 320,
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        painter: _HardwareOptimizedRingPainter(
-                          fillPercentage: animatedPercentage,
-                          activeColor: currentColor,
-                          backgroundColor: backgroundColor,
-                          pulseAnimation: _pulseAnimation,
-                        ),
-                      ),
-                    ),
+                  _buildRingPainter(
+                    animatedPercentage,
+                    currentColor,
+                    backgroundColor,
                   ),
-
-                  // --- TESTO CENTRALE ---
-                  SizedBox(
-                    width: 200,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _getStateLabel(),
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2.0,
-                              color: currentColor,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "${(animatedPercentage * 100).round()}%",
-                            style: theme.textTheme.displayLarge?.copyWith(
-                              fontSize: 48,
-                              fontWeight: FontWeight.w200,
-                              color: theme.colorScheme.onSurface,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            "SEGMENT PROGRESS",
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontSize: 10,
-                              letterSpacing: 1.5,
-                              color: theme.colorScheme.onSurface.withAlpha(127),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _buildCenterText(theme, currentColor, animatedPercentage),
                 ],
               ),
             );
@@ -190,17 +162,110 @@ class _BiometricRingState extends State<BiometricRing>
       },
     );
   }
+
+  /// The painted ring, isolated behind a [RepaintBoundary] so its per-frame
+  /// breathing repaint never dirties the surrounding widgets.
+  Widget _buildRingPainter(
+    double animatedPercentage,
+    Color currentColor,
+    Color backgroundColor,
+  ) {
+    return SizedBox(
+      width: _ringSize,
+      height: _ringSize,
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _HardwareOptimizedRingPainter(
+            fillPercentage: animatedPercentage,
+            activeColor: currentColor,
+            backgroundColor: backgroundColor,
+            pulseAnimation: _pulseAnimation,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Centered stack of text: state label, big percentage, and caption.
+  Widget _buildCenterText(
+    ThemeData theme,
+    Color currentColor,
+    double animatedPercentage,
+  ) {
+    return SizedBox(
+      width: 200,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _getStateLabel(),
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+                color: currentColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "${(animatedPercentage * 100).round()}%",
+              style: theme.textTheme.displayLarge?.copyWith(
+                fontSize: 48,
+                fontWeight: FontWeight.w200,
+                color: theme.colorScheme.onSurface,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            Text(
+              "SEGMENT PROGRESS",
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontSize: 10,
+                letterSpacing: 1.5,
+                color: theme.colorScheme.onSurface.withAlpha(127),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-// --- PITTURA DIRETTA SU CANVAS (Direct Rendering Pipeline) ---
+/// Draws the ring directly on the canvas (a direct rendering pipeline).
+///
+/// Rather than wrap the ring in `Transform.scale`/`AnimatedBuilder` widgets,
+/// the breathing animation is passed straight in as the painter's `repaint`
+/// listener, so each pulse frame only re-runs [paint] — the widget tree is left
+/// untouched. All three [Paint]s are built once in the constructor to avoid
+/// per-frame allocations.
 class _HardwareOptimizedRingPainter extends CustomPainter {
   final double fillPercentage;
   final Animation<double> pulseAnimation;
 
-  // Pre-istanziamo i pennelli per non allocare memoria ad ogni frame
+  // Pre-instantiated brushes (see class doc): allocated once, reused per frame.
   final Paint _backgroundPaint;
   final Paint _activePaint;
   final Paint _glowPaint;
+
+  // --- Ring geometry ---
+  static const double _strokeWidth = 12.0; // Track + active ring thickness.
+  static const double _glowStrokeWidth = 20.0; // Wider, blurred halo stroke.
+  static const int _glowAlpha = 77; // ~30% opacity for the halo.
+  static const double _glowBlurSigma = 15.0; // Softens the halo stroke.
+
+  /// Inset from the half-size to the ring radius. Leaves headroom for the wide,
+  /// blurred glow stroke so the halo isn't clipped by the layout box.
+  static const double _radiusInset = 40.0;
+
+  /// Arc start angle: -90° points to 12 o'clock, so progress sweeps clockwise
+  /// from the top.
+  static const double _startAngle = -pi / 2;
+
+  /// Below this fraction there is nothing meaningful to draw (avoids a stray
+  /// dot from a near-zero arc).
+  static const double _minVisibleFill = 0.01;
 
   _HardwareOptimizedRingPainter({
     required this.fillPercentage,
@@ -210,74 +275,67 @@ class _HardwareOptimizedRingPainter extends CustomPainter {
   }) : _backgroundPaint = Paint()
          ..color = backgroundColor
          ..style = PaintingStyle.stroke
-         ..strokeWidth = 12
+         ..strokeWidth = _strokeWidth
          ..strokeCap = StrokeCap.round,
        _activePaint = Paint()
          ..color = activeColor
          ..style = PaintingStyle.stroke
-         ..strokeWidth = 12
+         ..strokeWidth = _strokeWidth
          ..strokeCap = StrokeCap.round,
        _glowPaint = Paint()
-         ..color = activeColor.withAlpha(77)
+         ..color = activeColor.withAlpha(_glowAlpha)
          ..style = PaintingStyle.stroke
-         ..strokeWidth = 20.0
+         ..strokeWidth = _glowStrokeWidth
          ..strokeCap = StrokeCap.round
-         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15),
-       // Il parametro `repaint` dice a Flutter di ridisegnare questo Canvas ad ogni battito
-       // SENZA ricalcolare l'intero Widget Tree.
+         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, _glowBlurSigma),
+       // repaint: redraw this canvas on every breath tick WITHOUT rebuilding
+       // the widget tree.
        super(repaint: pulseAnimation);
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = min(size.width / 2, size.height / 2) - 40;
+    final radius = min(size.width / 2, size.height / 2) - _radiusInset;
+    final scale = pulseAnimation.value; // Current breathing scale.
 
-    // Leggiamo la scala attuale del respiro
-    final scale = pulseAnimation.value;
-
-    // Salviamo lo stato del canvas
     canvas.save();
-
-    // TRUCCO MATEMATICO: Spostiamo l'asse al centro, ingrandiamo l'universo, e torniamo indietro
+    // Scale about the center. canvas.scale() scales about the top-left origin,
+    // so we translate the origin to the center, scale, then translate back.
     canvas.translate(center.dx, center.dy);
     canvas.scale(scale, scale);
     canvas.translate(-center.dx, -center.dy);
 
-    // 1. Disegna l'anello di sfondo fantasma
+    // 1. Ghost background track (the full ring).
     canvas.drawCircle(center, radius, _backgroundPaint);
 
-    // 2. Disegna il Glow e l'anello di riempimento in una singola passata
-    if (fillPercentage > 0.01) {
-      if (fillPercentage >= 1.0) {
-        canvas.drawCircle(center, radius, _glowPaint);
-        canvas.drawCircle(center, radius, _activePaint);
-      } else {
-        final rect = Rect.fromCircle(center: center, radius: radius);
-        // L'angolo iniziale è -pi/2 (che corrisponde alle "ore 12" di un orologio)
-        canvas.drawArc(
-          rect,
-          -pi / 2,
-          2 * pi * fillPercentage,
-          false,
-          _glowPaint,
-        );
-        canvas.drawArc(
-          rect,
-          -pi / 2,
-          2 * pi * fillPercentage,
-          false,
-          _activePaint,
-        );
-      }
+    // 2. Glow + active fill, drawn in a single pass over the same geometry.
+    _drawProgress(canvas, center, radius);
+
+    canvas.restore();
+  }
+
+  /// Paints the filled portion of the ring: a full circle once complete, or an
+  /// arc sweeping clockwise from 12 o'clock. The blurred glow is drawn first so
+  /// the crisp active stroke sits on top of it.
+  void _drawProgress(Canvas canvas, Offset center, double radius) {
+    if (fillPercentage <= _minVisibleFill) return;
+
+    if (fillPercentage >= 1.0) {
+      canvas.drawCircle(center, radius, _glowPaint);
+      canvas.drawCircle(center, radius, _activePaint);
+      return;
     }
 
-    // Ripristiniamo il canvas
-    canvas.restore();
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final sweep = 2 * pi * fillPercentage;
+    canvas.drawArc(rect, _startAngle, sweep, false, _glowPaint);
+    canvas.drawArc(rect, _startAngle, sweep, false, _activePaint);
   }
 
   @override
   bool shouldRepaint(covariant _HardwareOptimizedRingPainter oldDelegate) {
-    // Si aggiorna solo se la percentuale o il colore cambiano (i cambi di respiro sono gestiti in automatico dal super.repaint)
+    // Only the data-driven changes need a manual repaint; the breathing pulse is
+    // handled automatically via super.repaint.
     return oldDelegate.fillPercentage != fillPercentage ||
         oldDelegate._activePaint.color != _activePaint.color;
   }

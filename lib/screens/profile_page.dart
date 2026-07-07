@@ -5,10 +5,16 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../providers/analytics_provider.dart';
+import '../utils/ambient_glow.dart';
 import '../utils/dashboard_helpers.dart';
 import '../utils/settings_components.dart';
 import 'login_page.dart';
 
+/// Identity / settings screen: edit the profile, run developer tools, purge
+/// data, and log out.
+///
+/// Layer: UI. Reads/writes [AuthProvider]; tracks unsaved edits to guard against
+/// accidental navigation away, and confirms destructive actions with a dialog.
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -17,6 +23,9 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  /// Default nickname restored when personal data is purged.
+  static const String _defaultNickname = 'Student';
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _surnameController;
@@ -116,10 +125,10 @@ class _ProfilePageState extends State<ProfilePage> {
       await authProvider.clearProfileData();
       _initialName = '';
       _initialSurname = '';
-      _initialNickname = 'Student';
+      _initialNickname = _defaultNickname;
       _nameController.clear();
       _surnameController.clear();
-      _nicknameController.text = 'Student';
+      _nicknameController.text = _defaultNickname;
       _checkForChanges();
       _showCustomSnackBar('Identity purged successfully', isError: true);
     } catch (e) {
@@ -150,7 +159,7 @@ class _ProfilePageState extends State<ProfilePage> {
       await authProvider.logout();
       if (!mounted) return;
 
-      // ROTTA SPAZIALE: Logout è un "zoom out" dall'app
+      // Logout replaces the whole stack: an immersive "zoom out" back to login.
       Navigator.of(context).pushAndRemoveUntil(
         ImmersiveRoute(page: const LoginPage()),
         (route) => false,
@@ -253,24 +262,14 @@ class _ProfilePageState extends State<ProfilePage> {
           behavior: HitTestBehavior.translucent,
           child: Stack(
             children: [
-              // DEEP DARK GLOW
-              Positioned(
+              // Ambient background halo, mirrored to the left corner (vs the
+              // right-corner glow on the dashboard) to vary the identity screen.
+              AmbientGlow(
                 top: -150,
-                left: -100, // glow riflesso (sinistra invece che destra)
-                child: Container(
-                  width: 500,
-                  height: 500,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        colorScheme.tertiary.withAlpha(15),
-                        Colors.transparent,
-                      ], // Uniformato a 15
-                      stops: const [0.2, 1.0],
-                    ),
-                  ),
-                ),
+                left: -100,
+                size: 500,
+                color: colorScheme.tertiary,
+                centerAlpha: 15,
               ),
 
               CustomScrollView(

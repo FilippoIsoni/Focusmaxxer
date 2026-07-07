@@ -1,14 +1,39 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../providers/cognitive_engine_provider.dart';
+import 'package:provider/provider.dart';
 
+import '../app_constants.dart';
+import '../providers/cognitive_engine_provider.dart';
+import '../utils/ambient_glow.dart';
+import '../utils/duration_format.dart';
+import '../utils/termination_badge.dart';
+
+/// Post-session debrief screen: shows the outcome of a focus session
+/// (duration, recovery time, average HR and the heart-rate timeline chart).
+///
+/// Layer: UI. Serves two flows:
+///   * live debrief — reads the just-finished session from
+///     [CognitiveEngineProvider] and resets the engine on close;
+///   * history replay — rendered read-only from a stored session passed in via
+///     [historicalTimeline] (see the Analytics tab), where "close" simply pops.
+///
+/// Collaborators: [CognitiveEngineProvider] (live data + reset),
+/// [TerminationBadge] (why the session ended), [formatHuman] (duration labels).
 class SessionReportPage extends StatelessWidget {
+  /// Total wall-clock length of the session being reported.
   final Duration duration;
+
+  /// When true, this is a read-only replay of a stored session (back-navigable);
+  /// when false, it is the live debrief that owns resetting the engine on close.
   final bool isHistory;
+
+  /// HR/state samples for a stored session; only used when [isHistory] is true.
+  /// Live debriefs read the timeline straight from the engine instead.
   final List<Map<String, dynamic>>? historicalTimeline;
+
+  /// Persisted reason the session ended (a [TerminationReasons] value).
   final String terminationReason;
 
   const SessionReportPage({
@@ -19,271 +44,57 @@ class SessionReportPage extends StatelessWidget {
     this.historicalTimeline,
   });
 
-  void _finishSession(BuildContext context) {
-    context.read<CognitiveEngineProvider>().resetEngine();
-    HapticFeedback.mediumImpact();
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
+  // --- Chart geometry -------------------------------------------------------
 
-  String _formatDuration(Duration d) {
-    final minutes = d.inMinutes;
-    if (minutes < 60) return '$minutes min';
-    return '${minutes ~/ 60}h ${minutes % 60}m';
-  }
+  // Fixed heart-rate axis bounds (bpm). Hard-coding the vertical scale keeps the
+  // chart shape comparable across sessions and clips physiological outliers.
+  static const double _chartMinBpm = 40;
+  static const double _chartMaxBpm = 160;
+
+  // Engine states that count as "focus" (as opposed to a recovery/break phase)
+  // when reading the persisted timeline. `analyzingBaseline` is the calibration
+  // ramp at the start of focus, so it is grouped with focus, not recovery.
+  static const String _stateFocus = 'focus';
+  static const String _stateAnalyzingBaseline = 'analyzingBaseline';
+
+  // ==========================================
+  // BUILD
+  // ==========================================
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    // Pick the data source: stored samples for history, live buffer otherwise.
     final hrTimeline = isHistory
-        ? (historicalTimeline ?? [])
+        ? (historicalTimeline ?? const [])
         : context.read<CognitiveEngineProvider>().hrTimeline;
 
-    int avgHr = 0;
-    int recoveryMin = 0;
-
-    if (hrTimeline.isNotEmpty) {
-      int totalHr = 0;
-      int breakTicks = 0;
-      for (var point in hrTimeline) {
-        int hr = point['hr'] as int;
-        String state = point['state'] as String? ?? 'focus';
-        totalHr += hr;
-        if (state != 'focus' && state != 'analyzingBaseline') breakTicks++;
-      }
-      avgHr = totalHr ~/ hrTimeline.length;
-      recoveryMin = (breakTicks * 5) ~/ 60;
-    }
-
-    Color badgeColor;
-    IconData badgeIcon;
-    if (terminationReason == 'CLINICAL LIMIT REACHED') {
-      badgeColor = colorScheme.tertiary;
-      badgeIcon = Icons.military_tech_rounded;
-    } else if (terminationReason == 'NEURAL FATIGUE') {
-      badgeColor = colorScheme.secondary;
-      badgeIcon = Icons.battery_alert_rounded;
-    } else if (terminationReason == 'OFF PROTOCOL') {
-      badgeColor = colorScheme.error;
-      badgeIcon = Icons.gpp_bad_rounded;
-    } else if (terminationReason == 'USER MOVEMENT') {
-      badgeColor = colorScheme.secondary;
-      badgeIcon = Icons.directions_walk_rounded;
-    } else if (terminationReason == 'APP BACKGROUNDED') {
-      badgeColor = colorScheme.secondary;
-      badgeIcon = Icons.visibility_off_rounded;
-    } else {
-      badgeColor = colorScheme.primary;
-      badgeIcon = Icons.check_circle_rounded;
-    }
+    final stats = _computeStats(hrTimeline);
+    // Single source of truth for how a termination reason is coloured/iconified,
+    // shared with the Analytics history so both screens render an identical badge.
+    final badge = TerminationBadge.forReason(terminationReason, colorScheme);
 
     return PopScope(
+      // History replay is freely back-navigable; a live debrief is not, so the
+      // user must consciously close it (which resets the engine).
       canPop: isHistory,
       child: Scaffold(
-        // FIX NERO PROFONDO
         backgroundColor: theme.scaffoldBackgroundColor,
         body: Stack(
           children: [
-            // AMBIENT GLOW ALLINEATO ALLA HOME
-            Positioned(
+            // Ambient halo behind the content, tinted to match the outcome badge.
+            AmbientGlow(
               top: -150,
               right: -100,
-              child: Container(
-                width: 500,
-                height: 500,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      badgeColor.withAlpha(15),
-                      Colors.transparent,
-                    ], // Scurissimo e pulito
-                    stops: const [0.2, 1.0],
-                  ),
-                ),
-              ),
+              size: 500,
+              color: badge.color,
+              centerAlpha: 15, // Very subtle: keep the dark background clean.
             ),
-
-            // RIMOSSO IL BACKDROP FILTER A TUTTO SCHERMO CHE ROVINAVA I NERI
             SafeArea(
-              child: CustomScrollView(
-                physics: const BouncingScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24.0,
-                        vertical: 32.0,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withAlpha(20),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: badgeColor.withAlpha(40),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(badgeIcon, size: 16, color: badgeColor),
-                                const SizedBox(width: 8),
-                                Text(
-                                  terminationReason,
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: badgeColor,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 48),
-
-                          Text(
-                            'DEEP WORK',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 2.0,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatDuration(duration),
-                            style: theme.textTheme.displayLarge?.copyWith(
-                              fontSize: 64,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: -1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 48),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildMetricTile(
-                                  context,
-                                  icon: Icons.waves_rounded,
-                                  label: 'RECOVERY',
-                                  value: '$recoveryMin min',
-                                  color: colorScheme.tertiary,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildMetricTile(
-                                  context,
-                                  icon: Icons.favorite_rounded,
-                                  label: 'AVG HR',
-                                  value: '${avgHr > 0 ? avgHr : '--'} bpm',
-                                  color: colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 48),
-
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'HEART RATE TIMELINE',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                letterSpacing: 2.0,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Container(
-                            height: 240,
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surfaceContainerHighest
-                                  .withAlpha(50),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withAlpha(10),
-                              ),
-                            ),
-                            child: hrTimeline.isEmpty
-                                ? const Center(
-                                    child: Text(
-                                      "No physiological data recorded.",
-                                      style: TextStyle(color: Colors.white54),
-                                    ),
-                                  )
-                                : _buildChart(colorScheme, hrTimeline, avgHr),
-                          ),
-
-                          if (hrTimeline.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 20.0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildLegendItem(
-                                    colorScheme.primary,
-                                    'Focus Phase',
-                                  ),
-                                  const SizedBox(width: 24),
-                                  _buildLegendItem(
-                                    colorScheme.tertiary,
-                                    'Recovery Phase',
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          const Spacer(),
-                          const SizedBox(height: 40),
-
-                          // FIX SAFE AREA BOTTONE
-                          SafeArea(
-                            top: false,
-                            child: SizedBox(
-                              width: double.infinity,
-                              height: 64,
-                              child: FilledButton(
-                                onPressed: isHistory
-                                    ? () => Navigator.of(context).pop()
-                                    : () => _finishSession(context),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor:
-                                      colorScheme.surfaceContainerHighest,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'CLOSE DEBRIEF',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: _buildBody(context, theme, colorScheme, badge, stats,
+                  hrTimeline),
             ),
           ],
         ),
@@ -291,6 +102,252 @@ class SessionReportPage extends StatelessWidget {
     );
   }
 
+  // ==========================================
+  // PRIVATE HELPERS
+  // ==========================================
+
+  /// Closes the live debrief: resets the engine, gives haptic confirmation and
+  /// unwinds the navigation stack back to the app root.
+  void _finishSession(BuildContext context) {
+    context.read<CognitiveEngineProvider>().resetEngine();
+    HapticFeedback.mediumImpact();
+    Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  /// Reduces the raw HR timeline to the two headline metrics.
+  ///
+  /// Returns the average heart rate (bpm) and the total recovery time (minutes).
+  /// Both are 0 when there are no samples, which the UI renders as a placeholder.
+  ({int avgHr, int recoveryMin}) _computeStats(
+      List<Map<String, dynamic>> timeline) {
+    if (timeline.isEmpty) return (avgHr: 0, recoveryMin: 0);
+
+    int totalHr = 0;
+    int breakTicks = 0; // Ticks spent in a recovery/break phase.
+    for (final point in timeline) {
+      final hr = point['hr'] as int;
+      final state = point['state'] as String? ?? _stateFocus;
+      totalHr += hr;
+      // Anything that is neither focus nor its baseline ramp is recovery time.
+      if (state != _stateFocus && state != _stateAnalyzingBaseline) {
+        breakTicks++;
+      }
+    }
+
+    // Each tick represents `tickDurationSeconds` of simulated time; convert the
+    // recovery tick count to whole minutes.
+    final recoveryMin = (breakTicks * tickDurationSeconds) ~/ 60;
+    return (avgHr: totalHr ~/ timeline.length, recoveryMin: recoveryMin);
+  }
+
+  /// Scrollable page body: badge, duration hero, metric tiles and HR chart.
+  Widget _buildBody(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme colorScheme,
+    TerminationBadge badge,
+    ({int avgHr, int recoveryMin}) stats,
+    List<Map<String, dynamic>> hrTimeline,
+  ) {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildReasonBadge(theme, badge),
+                const SizedBox(height: 48),
+                _buildDurationHero(theme, colorScheme),
+                const SizedBox(height: 48),
+                _buildMetricsRow(context, colorScheme, stats),
+                const SizedBox(height: 48),
+                _buildChartSection(theme, colorScheme, hrTimeline, stats.avgHr),
+                const Spacer(),
+                const SizedBox(height: 40),
+                _buildCloseButton(context, colorScheme),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Pill showing the termination reason with its matching color and icon.
+  Widget _buildReasonBadge(ThemeData theme, TerminationBadge badge) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: badge.color.withAlpha(20),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: badge.color.withAlpha(40)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(badge.icon, size: 16, color: badge.color),
+          const SizedBox(width: 8),
+          Text(
+            terminationReason,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: badge.color,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "DEEP WORK" label above the large human-readable duration total.
+  Widget _buildDurationHero(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      children: [
+        Text(
+          'DEEP WORK',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+            letterSpacing: 2.0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          formatHuman(duration.inSeconds),
+          style: theme.textTheme.displayLarge?.copyWith(
+            fontSize: 64,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            letterSpacing: -1.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Side-by-side recovery-time and average-HR metric tiles.
+  Widget _buildMetricsRow(
+    BuildContext context,
+    ColorScheme colorScheme,
+    ({int avgHr, int recoveryMin}) stats,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildMetricTile(
+            context,
+            icon: Icons.waves_rounded,
+            label: 'RECOVERY',
+            value: '${stats.recoveryMin} min',
+            color: colorScheme.tertiary,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _buildMetricTile(
+            context,
+            icon: Icons.favorite_rounded,
+            label: 'AVG HR',
+            // Show a placeholder when no samples produced a real average.
+            value: '${stats.avgHr > 0 ? stats.avgHr : '--'} bpm',
+            color: colorScheme.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Chart heading, the HR chart card and (when data exists) its legend.
+  Widget _buildChartSection(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    List<Map<String, dynamic>> hrTimeline,
+    int avgHr,
+  ) {
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'HEART RATE TIMELINE',
+            style: theme.textTheme.labelSmall?.copyWith(
+              letterSpacing: 2.0,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Container(
+          height: 240,
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerHighest.withAlpha(50),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withAlpha(10)),
+          ),
+          // Empty-state message when a session recorded no physiological data.
+          child: hrTimeline.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No physiological data recorded.',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                )
+              : _buildChart(colorScheme, hrTimeline, avgHr),
+        ),
+        if (hrTimeline.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 20.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLegendItem(colorScheme.primary, 'Focus Phase'),
+                const SizedBox(width: 24),
+                _buildLegendItem(colorScheme.tertiary, 'Recovery Phase'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Primary action button: pops a history replay, or ends the live session.
+  Widget _buildCloseButton(BuildContext context, ColorScheme colorScheme) {
+    return SafeArea(
+      top: false, // Only pad the bottom; the top is already handled by the page.
+      child: SizedBox(
+        width: double.infinity,
+        height: 64,
+        child: FilledButton(
+          onPressed: isHistory
+              ? () => Navigator.of(context).pop()
+              : () => _finishSession(context),
+          style: FilledButton.styleFrom(
+            backgroundColor: colorScheme.surfaceContainerHighest,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          child: const Text(
+            'CLOSE DEBRIEF',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A single colored-dot + label entry for the chart legend.
   Widget _buildLegendItem(Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -314,6 +371,7 @@ class SessionReportPage extends StatelessWidget {
     );
   }
 
+  /// Frosted-glass tile showing one headline metric (icon, value, label).
   Widget _buildMetricTile(
     BuildContext context, {
     required IconData icon,
@@ -341,17 +399,17 @@ class SessionReportPage extends StatelessWidget {
               Text(
                 value,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
               ),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  letterSpacing: 1.0,
-                ),
+                      color: colorScheme.onSurfaceVariant,
+                      letterSpacing: 1.0,
+                    ),
               ),
             ],
           ),
@@ -360,6 +418,8 @@ class SessionReportPage extends StatelessWidget {
     );
   }
 
+  /// Builds the heart-rate line chart with focus/recovery band shading, an
+  /// average-HR reference line and a per-point time/BPM tooltip.
   Widget _buildChart(
     ColorScheme colorScheme,
     List<Map<String, dynamic>> timeline,
@@ -369,15 +429,19 @@ class SessionReportPage extends StatelessWidget {
     final List<VerticalRangeAnnotation> annotations = [];
 
     for (int i = 0; i < timeline.length; i++) {
-      double startX = (i * 5) / 60.0;
-      double endX = ((i + 1) * 5) / 60.0;
-      double hrValue = (timeline[i]['hr'] as int).toDouble();
+      // X axis is elapsed time in minutes: convert the tick index (and the next
+      // tick boundary) from ticks -> seconds -> minutes.
+      final startX = (i * tickDurationSeconds) / 60.0;
+      final endX = ((i + 1) * tickDurationSeconds) / 60.0;
+      final hrValue = (timeline[i]['hr'] as int).toDouble();
 
       spots.add(FlSpot(startX, hrValue));
 
-      String state = timeline[i]['state'] as String? ?? 'focus';
-      bool isFocus = state == 'focus' || state == 'analyzingBaseline';
+      final state = timeline[i]['state'] as String? ?? _stateFocus;
+      final isFocus = state == _stateFocus || state == _stateAnalyzingBaseline;
 
+      // Shade the tick's time band by phase: primary tint for focus, tertiary
+      // for recovery.
       annotations.add(
         VerticalRangeAnnotation(
           x1: startX,
@@ -394,13 +458,12 @@ class SessionReportPage extends StatelessWidget {
         gridData: const FlGridData(show: false),
         titlesData: const FlTitlesData(show: false),
         borderData: FlBorderData(show: false),
-        minY: 40,
-        maxY: 160,
-        rangeAnnotations: RangeAnnotations(
-          verticalRangeAnnotations: annotations,
-        ),
+        minY: _chartMinBpm,
+        maxY: _chartMaxBpm,
+        rangeAnnotations: RangeAnnotations(verticalRangeAnnotations: annotations),
         extraLinesData: ExtraLinesData(
           horizontalLines: [
+            // Dashed reference line at the session's average HR.
             HorizontalLine(
               y: avgHr.toDouble(),
               color: Colors.white.withAlpha(30),
@@ -424,14 +487,11 @@ class SessionReportPage extends StatelessWidget {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final int totalSeconds = (spot.x * 60).round();
-                final int totalMinutes = totalSeconds ~/ 60;
-                final String timeStr = totalMinutes >= 60
-                    ? '${totalMinutes ~/ 60}h ${totalMinutes % 60}m'
-                    : '$totalMinutes min';
-
+                // spot.x is elapsed minutes; convert back to seconds for the
+                // shared human formatter, then show BPM below it.
+                final totalSeconds = (spot.x * 60).round();
                 return LineTooltipItem(
-                  '$timeStr\n',
+                  '${formatHuman(totalSeconds)}\n',
                   const TextStyle(
                     color: Colors.white54,
                     fontSize: 10,

@@ -1,7 +1,18 @@
+/// Immutable snapshot of the SAFTE model's output at a single instant.
+///
+/// Layer: model (plain data). Produced by `SafteEngine.computeStateAt` and read
+/// by the UI as the user's "Readiness".
 class SafteState {
-  final double effectiveness; // Il tuo nuovo Readiness Score (%)
-  final double reservoir; // Riserva omeostatica R(t)
-  final double circadianValue; // C(t) per scopi di analisi
+  /// Readiness score (%), the final effectiveness shown in the UI.
+  final double effectiveness;
+
+  /// Homeostatic cognitive reserve R(t) at [timestamp].
+  final double reservoir;
+
+  /// Circadian modulator C(t), kept for analysis/inspection.
+  final double circadianValue;
+
+  /// Instant this state describes.
   final DateTime timestamp;
 
   const SafteState({
@@ -10,7 +21,4 @@ class SafteState {
     required this.circadianValue,
     required this.timestamp,
   });
-
-  // Getter per la UI: trasforma l'efficacia in una stringa leggibile
-  String get formattedScore => "${effectiveness.toInt()}%";
 }

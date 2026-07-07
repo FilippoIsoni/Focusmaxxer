@@ -5,14 +5,18 @@ import '../providers/auth_provider.dart';
 import '../providers/safte_provider.dart';
 import '../providers/analytics_provider.dart';
 import '../services/impact_api_service.dart';
-import '../utils/dashboard_helpers.dart'; // Aggiunto per le nuove transizioni
+import '../utils/dashboard_helpers.dart'; // ImmersiveRoute for screen transitions.
 
 import 'home_dashboard.dart';
 import 'login_page.dart';
 import 'onboarding_page.dart';
 
-/// Universal Bootloader: Evaluates auth state, fetches telemetry,
-/// and orchestrates the biomathematical sync before launching the app.
+/// Startup orchestrator shown before the app proper.
+///
+/// Layer: UI. It runs the boot sequence once on first frame: route by auth
+/// state → fetch the morning sleep baseline → sync the SAFTE engine → reset the
+/// daily counter on a new biological day → launch the dashboard. On a dead
+/// session it routes to login; on a transient failure it shows a Retry screen.
 class BootloaderScreen extends StatefulWidget {
   const BootloaderScreen({super.key});
 
@@ -75,7 +79,7 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
 
       if (!mounted) return;
 
-      // 5. SYSTEM READY -> LAUNCH (Tuffo nel sistema)
+      // 5. SYSTEM READY → launch the main dashboard.
       _routeTo(const HomeDashboard());
     } on SessionExpiredException {
       // The session was rejected server-side (onSessionExpired already logged
@@ -94,7 +98,7 @@ class _BootloaderScreenState extends State<BootloaderScreen> {
   }
 
   void _routeTo(Widget page) {
-    // Sostituito il vecchio router custom con il nostro ImmersiveRoute ufficiale
+    // Every boot destination uses the app's ImmersiveRoute for a consistent feel.
     Navigator.of(context).pushReplacement(ImmersiveRoute(page: page));
   }
 

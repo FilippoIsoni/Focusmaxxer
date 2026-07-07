@@ -1,17 +1,32 @@
 import 'dart:convert';
-import 'package:floor/floor.dart';
-import '../providers/cognitive_engine_provider.dart' show EngineState;
 
-/// Immutable object representing a completed and consolidated session.
+import 'package:floor/floor.dart';
+
+import 'engine_state.dart';
+
+/// A completed, consolidated focus session as it is stored in the database.
+///
+/// Layer: model. This is the Floor `@entity` persisted in the sessions table;
+/// its field names/types are the storage schema (see `app_database.g.dart`).
 @entity
 class CognitiveSession {
   @PrimaryKey(autoGenerate: true)
   final int? id;
-  final String date; // ISO 8601 string
+
+  /// Session start, as an ISO-8601 string.
+  final String date;
+
+  /// Total focused time in seconds (breaks excluded).
   final int durationSeconds;
-  final double endingEffectiveness; // Final SAFTE score
-  final String hrTimelineJson; // JSON-serialized HR timeline array
-  final String terminationReason; // Why the session ended
+
+  /// SAFTE effectiveness (%) at the moment the session ended.
+  final double endingEffectiveness;
+
+  /// HR timeline serialized as a JSON array (rendered as a chart in the report).
+  final String hrTimelineJson;
+
+  /// Why the session ended — one of the [TerminationReasons] string values.
+  final String terminationReason;
 
   CognitiveSession({
     this.id,
@@ -23,14 +38,16 @@ class CognitiveSession {
   });
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'date': date,
-    'durationSeconds': durationSeconds,
-    'endingEffectiveness': endingEffectiveness,
-    'hrTimelineJson': hrTimelineJson,
-    'terminationReason': terminationReason,
-  };
+        'id': id,
+        'date': date,
+        'durationSeconds': durationSeconds,
+        'endingEffectiveness': endingEffectiveness,
+        'hrTimelineJson': hrTimelineJson,
+        'terminationReason': terminationReason,
+      };
 
+  /// Rebuilds a session from a decoded JSON map, tolerating missing optional
+  /// fields (empty timeline, default termination reason) rather than throwing.
   factory CognitiveSession.fromJson(Map<String, dynamic> json) {
     return CognitiveSession(
       id: json['id'] as int?,
@@ -43,27 +60,39 @@ class CognitiveSession {
   }
 }
 
-/// A volatile buffer that holds telemetry and counters while a session is running.
+/// Volatile, in-memory accumulator for a session that is currently running.
+///
+/// Layer: model. It gathers focus time and the HR timeline tick by tick, then
+/// freezes into an immutable [CognitiveSession] when the session ends.
 class ActiveSessionBuffer {
+  /// A session must accumulate more than 10 minutes of focus to be worth
+  /// persisting; shorter attempts are discarded as noise.
+  static const int _minValidatedFocusSeconds = 600;
+
   final DateTime startTime;
+
+  /// Seconds spent in focus (or baseline analysis) so far.
   int totalFocusSeconds = 0;
-  int totalBreakSeconds = 0;
+
+  /// Per-tick telemetry: `{time, hr, state}` maps, later JSON-encoded.
   final List<Map<String, dynamic>> hrTimeline = [];
 
   ActiveSessionBuffer({required this.startTime});
 
-  bool get isValidated => totalFocusSeconds > 600;
+  /// Whether this session is substantial enough to save (see the threshold).
+  bool get isValidated => totalFocusSeconds > _minValidatedFocusSeconds;
 
+  /// Records one tick: counts focus time and always appends a timeline point.
   void recordTick({
     required EngineState state,
     required double hr,
     required int tickDuration,
     required DateTime currentTime,
   }) {
+    // Only focus (and its warm-up baseline phase) counts toward focus time;
+    // break ticks are still captured in the timeline below, just not counted.
     if (state == EngineState.analyzingBaseline || state == EngineState.focus) {
       totalFocusSeconds += tickDuration;
-    } else if (state == EngineState.breakMode) {
-      totalBreakSeconds += tickDuration;
     }
 
     hrTimeline.add({
@@ -73,6 +102,7 @@ class ActiveSessionBuffer {
     });
   }
 
+  /// Freezes this buffer into the immutable session to persist.
   CognitiveSession toCompletedSession(
     double finalEffectiveness,
     String reason,

@@ -1,40 +1,46 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // <--- Necessario per HapticFeedback
+import 'package:flutter/services.dart'; // For HapticFeedback.
+
+import '../app_constants.dart';
 
 // --- MODELS ---
 import '../models/safte_state.dart';
 import '../models/session_data.dart';
+import '../models/engine_state.dart';
+// Re-export so UI code that imports this provider still sees EngineState.
+export '../models/engine_state.dart';
 
 // --- SERVICES & FUNCTIONS ---
 import '../services/simulator_service.dart';
 import '../services/device_hardware_service.dart';
 import '../functions/safte_engine.dart';
 import '../functions/biometric_analyzer.dart';
-import '../functions/session_rules_engine.dart'; // <--- Il nuovo motore matematico
+import '../functions/session_rules_engine.dart';
+import '../functions/termination_reason.dart';
 
 // --- PROVIDERS ---
 import 'safte_provider.dart';
 import 'clock_provider.dart';
 import 'analytics_provider.dart';
 
-enum EngineState {
-  idle,
-  analyzingBaseline,
-  focus,
-  breakMode,
-  inhibited,
-  dailyLimitReached,
-  sessionEnded,
-}
-
 /// Why the AFK / anomaly state was raised, so the UI and the session report
 /// can describe the real cause instead of always blaming movement.
 enum AfkReason { movement, background }
 
-/// Core State Machine governing the Focus/Break lifecycle and telemetry ingestion.
-/// Purely coordinates data flow between the UI, the Rules Engine, and the Hardware Adapter.
+/// The central state machine of the app: it drives the focus/break lifecycle
+/// and is where the two data sources converge.
+///
+/// Layer: provider (coordinator). On every clock tick it reads simulated HR/steps
+/// and the SAFTE readiness, feeds them to the [BiometricAnalyzer] and
+/// [SessionRulesEngine], updates [EngineState], and delegates side effects to the
+/// hardware adapter — while owning the volatile [ActiveSessionBuffer] until a
+/// session is validated and persisted.
+///
+/// It subscribes to [GlobalClockProvider] (see [_onGlobalTick]) and observes app
+/// lifecycle events to handle backgrounding and best-effort commit on detach.
+/// The [EngineState] transition map is documented on the enum itself.
 class CognitiveEngineProvider extends ChangeNotifier
     with WidgetsBindingObserver {
   // ==========================================
@@ -51,9 +57,21 @@ class CognitiveEngineProvider extends ChangeNotifier
   // ==========================================
   // CONFIGURATION CONSTANTS (Lifecycle & UI)
   // ==========================================
-  static const int tickDurationSeconds = 5;
+  // Tick resolution is shared app-wide (see app_constants.tickDurationSeconds).
   static const int afkTimeoutSeconds = 60;
   static const int calibrationWindowSeconds = 600;
+
+  // Baseline calibration cadence.
+  static const int _baselineReadySeconds = 180; // 3 min to lock the flow baseline.
+  static const int _baselineRefreshSeconds = 15; // Re-optimize baseline every 15 s.
+
+  // AFK detection from steps.
+  static const int _stepCheckIntervalSeconds = 60; // Evaluate steps once a minute.
+  static const int _afkStepThreshold = 10; // > 10 steps/min ⇒ the user walked away.
+
+  // Manual break floor and daily-limit linger.
+  static const int _minManualBreakSeconds = 300; // A manual break is at least 5 min.
+  static const int _dailyLimitLingerSeconds = 2; // Show the cap screen briefly.
 
   // Catch-up cap: at most 30 virtual minutes (360 ticks) are replayed per
   // resume. A larger jump means a long absence and is handled as a void session.
@@ -69,7 +87,7 @@ class CognitiveEngineProvider extends ChangeNotifier
   static const int _breakExtensionSeconds = 300;
   static const int _maxBreakExtensions = 3;
 
-  String _terminationReason = 'MANUAL END';
+  String _terminationReason = TerminationReasons.manualEnd;
   String get terminationReason => _terminationReason;
 
   // ==========================================
@@ -252,7 +270,7 @@ class CognitiveEngineProvider extends ChangeNotifier
         if (_currentState == EngineState.focus ||
             _currentState == EngineState.breakMode) {
           // Abort the session directly instead of replaying.
-          endSession('OFF PROTOCOL');
+          endSession(TerminationReasons.offProtocol);
         } else {
           // analyzingBaseline: the paused/inactive handler already armed the
           // calibration anomaly overlay; keep it waiting for the user's
@@ -300,11 +318,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _elapsedBreakSeconds = 0;
     _simulatorElapsedSeconds = 0;
     _breakExtensions = 0;
-    _isBreakRecommended = false;
-    _isFocusRecommended = false;
-    _isMaxBreakReached = false;
-    _secondsSinceBreakRecommended = 0;
-    _isAfkWarningActive = false;
+    _resetSegmentAdvisory();
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
     _advisoryMessage = "Calibrating physiological baseline...";
@@ -351,9 +365,9 @@ class CognitiveEngineProvider extends ChangeNotifier
 
     // Evaluate Physical Movement
     _secondsSinceLastStepCheck += tickDurationSeconds;
-    if (_secondsSinceLastStepCheck >= 60) {
+    if (_secondsSinceLastStepCheck >= _stepCheckIntervalSeconds) {
       _secondsSinceLastStepCheck = 0;
-      if (_biometrics.stepsLastMinute > 10 &&
+      if (_biometrics.stepsLastMinute > _afkStepThreshold &&
           !_isAfkWarningActive &&
           (_currentState == EngineState.focus ||
               _currentState == EngineState.analyzingBaseline)) {
@@ -390,7 +404,7 @@ class CognitiveEngineProvider extends ChangeNotifier
 
     _elapsedFocusSeconds += tickDurationSeconds;
 
-    if (_elapsedFocusSeconds == 180) {
+    if (_elapsedFocusSeconds == _baselineReadySeconds) {
       _biometrics.optimizeBaseline();
       _advisoryMessage = "Flow state identified. Baseline tracking active.";
       _currentState = EngineState.focus;
@@ -405,8 +419,8 @@ class CognitiveEngineProvider extends ChangeNotifier
         // shows "app backgrounded" vs "user movement" instead of "manual end".
         endSession(
           _afkReason == AfkReason.background
-              ? 'APP BACKGROUNDED'
-              : 'USER MOVEMENT',
+              ? TerminationReasons.appBackgrounded
+              : TerminationReasons.userMovement,
         );
       }
       return;
@@ -415,7 +429,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _elapsedFocusSeconds += tickDurationSeconds;
 
     if (_elapsedFocusSeconds <= calibrationWindowSeconds &&
-        _elapsedFocusSeconds % 15 == 0) {
+        _elapsedFocusSeconds % _baselineRefreshSeconds == 0) {
       _biometrics.optimizeBaseline();
     }
 
@@ -457,7 +471,7 @@ class CognitiveEngineProvider extends ChangeNotifier
         _advisoryMessage = "OFF-PROTOCOL: stop the session and recover.";
         _triggerDoubleVibration();
       } else if (_secondsSinceBreakRecommended >= _protocolAbortSeconds) {
-        endSession('OFF PROTOCOL');
+        endSession(TerminationReasons.offProtocol);
       }
     }
   }
@@ -554,16 +568,12 @@ class CognitiveEngineProvider extends ChangeNotifier
   void manualTransitionToBreak() {
     final int calculatedBreakSeconds =
         (_elapsedFocusSeconds * _breakDurationRatio).toInt();
-    _targetBreakSeconds = math.max(300, calculatedBreakSeconds);
+    _targetBreakSeconds = math.max(_minManualBreakSeconds, calculatedBreakSeconds);
     _elapsedBreakSeconds = 0;
     // A manual break is a fresh break: reset the extension budget and any stale
     // AFK counters so leftover state from the previous segment does not carry over.
     _breakExtensions = 0;
-    _isBreakRecommended = false;
-    _isFocusRecommended = false;
-    _isMaxBreakReached = false;
-    _secondsSinceBreakRecommended = 0;
-    _isAfkWarningActive = false;
+    _resetSegmentAdvisory();
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
     _advisoryMessage = "Recovery initiated.";
@@ -575,15 +585,11 @@ class CognitiveEngineProvider extends ChangeNotifier
   void manualTransitionToFocus() {
     _calculateNextSegmentDuration();
     _elapsedFocusSeconds = 0;
-    _biometrics.window10Min.clear();
+    _biometrics.clearBaselineWindow();
     _biometrics.clearSteps();
-    _isBreakRecommended = false;
-    _isFocusRecommended = false;
-    // Clear break-phase leftovers so a stale "max break reached" flag or AFK
-    // counter cannot bleed into the new focus segment.
-    _isMaxBreakReached = false;
-    _secondsSinceBreakRecommended = 0;
-    _isAfkWarningActive = false;
+    _resetSegmentAdvisory();
+    // Also clear the AFK second-counters so break-phase leftovers can't bleed
+    // into the new focus segment.
     _afkWarningSeconds = 0;
     _secondsSinceLastStepCheck = 0;
     _advisoryMessage = "Session active.";
@@ -592,7 +598,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> endSession([String reason = 'MANUAL END']) async {
+  Future<void> endSession([String reason = TerminationReasons.manualEnd]) async {
     _terminationReason = reason;
     // Set terminal state FIRST (synchronously) so that any tick firing during
     // the async DB write cannot re-trigger endSession a second time.
@@ -608,7 +614,7 @@ class CognitiveEngineProvider extends ChangeNotifier
   }
 
   Future<void> _triggerDailyLimit() async {
-    _terminationReason = 'CLINICAL LIMIT REACHED';
+    _terminationReason = TerminationReasons.clinicalLimit;
     // Set terminal state immediately to block re-entry from concurrent ticks.
     _currentState = EngineState.dailyLimitReached;
     _updateWakelock();
@@ -616,11 +622,23 @@ class CognitiveEngineProvider extends ChangeNotifier
     // Guard against a dispose that happened during the async save.
     if (_isDisposed) return;
     notifyListeners();
-    Future.delayed(const Duration(seconds: 2), () {
+    Future.delayed(const Duration(seconds: _dailyLimitLingerSeconds), () {
       if (_isDisposed) return;
       _currentState = EngineState.sessionEnded;
       notifyListeners();
     });
+  }
+
+  /// Clears the transient advisory/recommendation flags that every segment
+  /// transition must reset, so a stale UI hint (break/focus recommended, "max
+  /// break reached", the off-protocol timer, or an AFK overlay) never bleeds
+  /// from one segment into the next.
+  void _resetSegmentAdvisory() {
+    _isBreakRecommended = false;
+    _isFocusRecommended = false;
+    _isMaxBreakReached = false;
+    _secondsSinceBreakRecommended = 0;
+    _isAfkWarningActive = false;
   }
 
   void resetEngine() {
@@ -632,11 +650,7 @@ class CognitiveEngineProvider extends ChangeNotifier
     _elapsedBreakSeconds = 0;
     _simulatorElapsedSeconds = 0;
     _breakExtensions = 0;
-    _isBreakRecommended = false;
-    _isFocusRecommended = false;
-    _isMaxBreakReached = false;
-    _secondsSinceBreakRecommended = 0;
-    _isAfkWarningActive = false;
+    _resetSegmentAdvisory();
     _advisoryMessage = "";
 
     _biometrics.resetSession();
@@ -655,8 +669,8 @@ class CognitiveEngineProvider extends ChangeNotifier
   void _calculateNextSegmentDuration() {
     final targets = SessionRulesEngine.calculateNextSegment(
       currentState: safteSnapshot,
-      // Shiftiamo l'orologio nel frame temporale dei dati del server (stessa finestra di wakeupTime)
-      // in modo che le proiezioni future siano coerenti con l'ancora biologica.
+      // Shift the clock into the server data's time frame (the same window as
+      // wakeupTime) so future projections stay aligned with the biological anchor.
       internalClock: _internalClock.subtract(SafteProvider.serverLag),
       baselineReservoir: safteProvider.baselineReservoir,
       wakeupTime: safteProvider.wakeupTime,

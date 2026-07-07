@@ -1,3 +1,12 @@
+/// Reusable building blocks for the Profile / Settings screen.
+///
+/// Layer: UI helper. A small kit of frosted-glass rows and containers
+/// ([SettingsGroup], [SettingsTextField], [SettingsActionRow]) plus the
+/// simulator scenario picker ([SimulatorSettingsRow], which talks to the
+/// [CognitiveEngineProvider]). Grouping them here keeps the settings page itself
+/// declarative.
+library;
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,10 +15,10 @@ import 'package:provider/provider.dart';
 import '../providers/cognitive_engine_provider.dart';
 import '../services/simulator_service.dart';
 
-/// ==========================================
-/// SETTINGS GROUP
-/// A container with a frosted glass effect for grouping form elements.
-/// ==========================================
+/// A frosted-glass container that visually groups a set of settings rows.
+///
+/// Wrap related [SettingsTextField]/[SettingsActionRow] children in one of these
+/// to get the shared rounded, blurred card treatment.
 class SettingsGroup extends StatelessWidget {
   final List<Widget> children;
 
@@ -27,6 +36,7 @@ class SettingsGroup extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
+        // Frosted-glass blur over whatever sits behind the group.
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Column(children: children),
@@ -36,15 +46,17 @@ class SettingsGroup extends StatelessWidget {
   }
 }
 
-/// ==========================================
-/// SETTINGS TEXT FIELD
-/// A stylized text input row designed for the SettingsGroup.
-/// ==========================================
+/// A stylized text-input row for use inside a [SettingsGroup].
+///
+/// Renders a leading [icon] and a borderless [TextFormField], plus a hairline
+/// divider unless it is the [isLast] row in its group.
 class SettingsTextField extends StatelessWidget {
   final String label;
   final IconData icon;
   final TextEditingController controller;
   final TextInputAction action;
+
+  /// When true, the trailing divider is omitted (last row in a group).
   final bool isLast;
   final bool isEnabled;
   final Function(String)? onSubmitted;
@@ -79,7 +91,6 @@ class SettingsTextField extends StatelessWidget {
                   textInputAction: action,
                   onFieldSubmitted: onSubmitted,
                   enabled: isEnabled,
-                  // Inherits bodyLarge from theme
                   style: theme.textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -90,19 +101,21 @@ class SettingsTextField extends StatelessWidget {
                       color: colorScheme.onSurfaceVariant.withAlpha(150),
                     ),
                     floatingLabelBehavior: FloatingLabelBehavior.always,
+                    // Strip all borders/fill: the SettingsGroup card provides
+                    // the surface, so the field must stay transparent.
                     border: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     isDense: true,
-                    filled:
-                        false, // Override the default filled background for groups
+                    filled: false,
                   ),
                 ),
               ),
             ],
           ),
         ),
+        // Hairline separator between rows (skipped on the last one).
         if (!isLast)
           Divider(
             height: 1,
@@ -115,10 +128,10 @@ class SettingsTextField extends StatelessWidget {
   }
 }
 
-/// ==========================================
-/// SETTINGS ACTION ROW
-/// A stylized clickable row for actions (Logout/Purge).
-/// ==========================================
+/// A tappable settings row for actions such as Logout or Purge Data.
+///
+/// [isDestructive] tints the row with the error color (the default) to warn
+/// about irreversible actions; set it false for neutral actions.
 class SettingsActionRow extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -139,6 +152,7 @@ class SettingsActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    // Destructive actions read in the error color; neutral ones in on-surface.
     final rowColor = isDestructive ? colorScheme.error : colorScheme.onSurface;
 
     return InkWell(
@@ -183,10 +197,11 @@ class SettingsActionRow extends StatelessWidget {
   }
 }
 
-/// ==========================================
-/// SIMULATOR SETTINGS ROW
-/// A dropdown to dynamically change the testing scenario.
-/// ==========================================
+/// Dropdown row that switches the active biometric [SimulationScenario].
+///
+/// This is a testing affordance: it reads the current scenario from and writes
+/// the new one back to the [CognitiveEngineProvider], which reconfigures the
+/// simulator feeding HR/steps.
 class SimulatorSettingsRow extends StatelessWidget {
   const SimulatorSettingsRow({super.key});
 
@@ -232,6 +247,7 @@ class SimulatorSettingsRow extends StatelessWidget {
                       );
                     }).toList(),
                     onChanged: (SimulationScenario? newValue) {
+                      // Ignore the "cleared" (null) case; only real picks apply.
                       if (newValue != null) {
                         HapticFeedback.lightImpact();
                         context.read<CognitiveEngineProvider>().updateScenario(
@@ -249,9 +265,16 @@ class SimulatorSettingsRow extends StatelessWidget {
     );
   }
 
+  /// Turns a camelCase enum name into a spaced, Title-Cased label for display.
+  ///
+  /// Example: `incompleteRecovery` -> `Incomplete Recovery`. The lookbehind
+  /// regex `(?<=[a-z])[A-Z]` matches each uppercase letter that directly follows
+  /// a lowercase one — i.e. every internal camelCase word boundary — and inserts
+  /// a space before it. The first character is then upper-cased for Title Case.
   String _formatScenarioName(String text) {
-    RegExp exp = RegExp(r'(?<=[a-z])[A-Z]');
-    String formatted = text.replaceAllMapped(exp, (m) => ' ${m.group(0)}');
-    return formatted[0].toUpperCase() + formatted.substring(1);
+    final RegExp camelBoundary = RegExp(r'(?<=[a-z])[A-Z]');
+    final String spaced =
+        text.replaceAllMapped(camelBoundary, (m) => ' ${m.group(0)}');
+    return spaced[0].toUpperCase() + spaced.substring(1);
   }
 }
