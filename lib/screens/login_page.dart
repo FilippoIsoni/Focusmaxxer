@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   static const double _glowBlurSigma = 80.0; // Heavy blur turns the circle soft.
 
   /// Logo asset shown above the title.
-  static const String _logoAsset = 'assets/focusmaxxer_logo_v3.png';
+  static const String _logoAsset = 'assets/focusmaxxer_ic_foreground_10e.png';
 
   bool _obscurePassword = true;
   bool _isLoading = false;
