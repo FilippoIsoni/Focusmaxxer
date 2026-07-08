@@ -34,7 +34,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   // of which the gradient-based AmbientGlow provides.
   static const double _glowDiameter = 400.0;
   static const int _glowAlpha = 15; // Subtle on the dark theme.
-  static const double _glowBlurSigma = 80.0; // Heavy blur turns the circle soft.
+  static const double _glowBlurSigma =
+      80.0; // Heavy blur turns the circle soft.
   static const Duration _glowAnimDuration = Duration(milliseconds: 800);
 
   final PageController _pageController = PageController();
@@ -52,10 +53,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   List<OnboardingData> _buildPages(ColorScheme colorScheme) {
     return [
       OnboardingData(
-        superTitle: 'THE SAFTE™ ENGINE',
+        superTitle: 'THE SAFTE ENGINE',
         title: 'Clinical-Grade\nProductivity',
         description:
-            'Forget arbitrary timers like the Pomodoro technique. FocusMaxxer uses the SAFTE™ biomathematical model to track your real cognitive battery and predict mental fatigue.',
+            'Forget arbitrary timers like the Pomodoro technique. FocusMaxxer uses the SAFTE biomathematical model to track your real cognitive battery and predict mental fatigue.',
         icon: Icons.bolt_rounded,
         themeColor: colorScheme.primary, // Teal
       ),
@@ -175,7 +176,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
         // Blurs everything painted above (i.e. the circle) into a soft glow.
         Positioned.fill(
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: _glowBlurSigma, sigmaY: _glowBlurSigma),
+            filter: ImageFilter.blur(
+              sigmaX: _glowBlurSigma,
+              sigmaY: _glowBlurSigma,
+            ),
             child: const SizedBox(),
           ),
         ),
