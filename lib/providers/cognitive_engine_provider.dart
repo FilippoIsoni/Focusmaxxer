@@ -211,8 +211,12 @@ class CognitiveEngineProvider extends ChangeNotifier
       // shade and the app switcher emit `inactive`, where the app stays visible,
       // the clock keeps ticking and data keeps flowing — so those must NOT trip
       // the AFK/anomaly guard (the clock likewise only stops on `paused`).
+      // breakMode is included too: the recovery decision (isRecoveryIncomplete)
+      // depends on the same continuous HR stream as focus, so an unattended
+      // background is just as invalidating during a break.
       if ((_currentState == EngineState.focus ||
-              _currentState == EngineState.analyzingBaseline) &&
+              _currentState == EngineState.analyzingBaseline ||
+              _currentState == EngineState.breakMode) &&
           !_isAfkWarningActive) {
         _afkReason = AfkReason.background;
         _isAfkWarningActive = true;
@@ -282,8 +286,16 @@ class CognitiveEngineProvider extends ChangeNotifier
           notifyListeners();
         } else if (_currentState == EngineState.focus ||
             _currentState == EngineState.breakMode) {
-          // Past calibration: a long absence voids the session.
-          endSession(TerminationReasons.offProtocol);
+          // Past calibration: a long absence voids the session. This branch is
+          // only reachable via a gap this large in the periodic clock tick,
+          // which in practice only happens after a real backgrounding — so the
+          // AFK reason armed at pause time is the true cause; fall back to
+          // offProtocol only for the (theoretical) non-background case.
+          endSession(
+            _afkReason == AfkReason.background
+                ? TerminationReasons.appBackgrounded
+                : TerminationReasons.offProtocol,
+          );
         } else {
           notifyListeners();
         }
@@ -491,6 +503,18 @@ class CognitiveEngineProvider extends ChangeNotifier
   }
 
   void _handleBreakMode() {
+    // Mirrors _handleFocusMode's background guard: freeze the break timer and
+    // count toward the same afkTimeoutSeconds window. Break has no movement
+    // AFK (movement is normal/expected during recovery), so background is the
+    // only reason this ever arms here.
+    if (_isAfkWarningActive) {
+      _afkWarningSeconds += tickDurationSeconds;
+      if (_afkWarningSeconds >= afkTimeoutSeconds) {
+        endSession(TerminationReasons.appBackgrounded);
+      }
+      return;
+    }
+
     final int previousElapsed = _elapsedBreakSeconds;
     _elapsedBreakSeconds += tickDurationSeconds;
 

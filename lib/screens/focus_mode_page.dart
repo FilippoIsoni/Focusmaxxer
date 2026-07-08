@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../utils/biometric_ring.dart';
 import '../utils/ambient_glow.dart';
 import '../utils/duration_format.dart';
+import '../utils/afk_warning_overlay.dart';
 import '../providers/cognitive_engine_provider.dart';
 import 'session_report.dart';
 import 'break_mode_page.dart';
@@ -123,7 +123,7 @@ class _FocusModePageState extends State<FocusModePage> {
             if (engine.isCalibrationAnomaly)
               _CalibrationAnomalyOverlay(reason: engine.afkReason)
             else if (engine.isAfkWarningActive)
-              _AfkWarningOverlay(reason: engine.afkReason),
+              AfkWarningOverlay(reason: engine.afkReason),
           ],
         ),
       ),
@@ -409,45 +409,6 @@ class _FocusModePageState extends State<FocusModePage> {
   }
 }
 
-/// Shared scaffold for the two full-screen modal overlays.
-///
-/// The calibration-anomaly and AFK overlays are *not* interchangeable (they
-/// differ in blur strength, dim level, colors and button count), so rather than
-/// force them into one parameterized widget we extract only their common
-/// chrome: a full-bleed blurred, dimmed backdrop with centered content.
-class _OverlayScaffold extends StatelessWidget {
-  const _OverlayScaffold({
-    required this.blurSigma,
-    required this.backdropAlpha,
-    required this.child,
-  });
-
-  /// Gaussian blur strength applied to whatever is behind the overlay.
-  final double blurSigma;
-
-  /// Opacity (0–255) of the surface-colored dim layer over the backdrop.
-  final int backdropAlpha;
-
-  /// The centered overlay content (icon, copy, action buttons).
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Positioned.fill(
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Container(
-            color: colorScheme.surface.withAlpha(backdropAlpha),
-            child: Center(child: child),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Blocking overlay shown when the baseline calibration is invalidated (the
 /// user moved, or the app was backgrounded). Offers restart or abort — there is
 /// no way to silently continue, since the baseline is unusable.
@@ -470,7 +431,7 @@ class _CalibrationAnomalyOverlay extends StatelessWidget {
         ? "The app was minimized.\nKeep it in the foreground: data collection stops in background."
         : "Anomalous condition detected.\nPlease do not move or use the phone during the baseline calibration phase.";
 
-    return _OverlayScaffold(
+    return OverlayScaffold(
       blurSigma: _blurSigma,
       backdropAlpha: _backdropAlpha,
       child: Padding(
@@ -552,87 +513,6 @@ class _CalibrationAnomalyOverlay extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Softer overlay shown when the user is flagged AFK mid-session (steps
-/// detected, or app backgrounded). The timer is paused; a single button
-/// resumes. Copy and icon adapt to the [reason].
-class _AfkWarningOverlay extends StatelessWidget {
-  const _AfkWarningOverlay({required this.reason});
-
-  final AfkReason reason;
-
-  // Lighter blur/dim than the calibration failure: this is a recoverable pause.
-  static const double _blurSigma = 10.0;
-  static const int _backdropAlpha = 150;
-  static const double _iconSize = 64.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final bool isBackground = reason == AfkReason.background;
-
-    final IconData icon = isBackground
-        ? Icons.visibility_off_rounded
-        : Icons.directions_walk_rounded;
-    final String title = isBackground ? "APP MINIMIZED" : "STEPS DETECTED";
-    final String body = isBackground
-        ? "Data collection requires the app in foreground.\nPress the button to resume."
-        : "Timer paused passively.\nPress the button to auto-resume.";
-
-    return _OverlayScaffold(
-      blurSigma: _blurSigma,
-      backdropAlpha: _backdropAlpha,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: colorScheme.secondary, size: _iconSize),
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              color: colorScheme.secondary,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2.0,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 48),
-          FilledButton.icon(
-            onPressed: () {
-              HapticFeedback.selectionClick();
-              context.read<CognitiveEngineProvider>().resolveAfkWarning();
-            },
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text(
-              "RESUME NOW",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: colorScheme.secondary,
-              foregroundColor: colorScheme.onSurface,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 20,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

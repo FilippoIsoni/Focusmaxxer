@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../functions/termination_reason.dart';
 import '../providers/cognitive_engine_provider.dart';
 import '../utils/duration_format.dart';
+import '../utils/afk_warning_overlay.dart';
 import '../utils/dashboard_helpers.dart';
 import 'session_report.dart';
 import 'focus_mode_page.dart';
@@ -170,6 +171,12 @@ class _BreakModePageState extends State<BreakModePage>
                 ],
               ),
             ),
+            // Background AFK: same overlay/timeout as focus (see
+            // CognitiveEngineProvider.didChangeAppLifecycleState) — recovery
+            // tracking depends on the same continuous HR stream as focus, so an
+            // unattended background is just as invalidating during a break.
+            if (engine.isAfkWarningActive)
+              AfkWarningOverlay(reason: engine.afkReason),
           ],
         ),
       ),
@@ -327,43 +334,51 @@ class _BreakModePageState extends State<BreakModePage>
   }
 
   /// END button. A tap only hints the gesture; the actual end requires a
-  /// long-press so the session can't be terminated by accident.
+  /// long-press so the session can't be terminated by accident. Disabled
+  /// while an AFK warning is active — the user must resolve it first, same as
+  /// the focus controls.
   Widget _buildEndButton(ThemeData theme, CognitiveEngineProvider engine) {
     final colorScheme = theme.colorScheme;
     return GestureDetector(
-      onTap: () {
-        // Educate the user that ending is a long-press gesture.
-        HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: colorScheme.surfaceContainerHighest,
-            duration: const Duration(milliseconds: 1500),
-            content: const Text(
-              'Long press to end session early.',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        );
-      },
-      onLongPress: () async {
-        // Guard against a double-fire racing the auto-route listener.
-        if (_isNavigating) return;
-        _isNavigating = true;
-        HapticFeedback.heavyImpact();
-        final duration = Duration(seconds: engine.sessionTotalFocusSeconds);
-        // Await so the DB write completes before navigating.
-        await engine.endSession(TerminationReasons.manualEnd);
-        // State.mounted guards the following State.context use across the await.
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          ImmersiveRoute(
-            page: SessionReportPage(
-              duration: duration,
-              terminationReason: TerminationReasons.manualEnd,
-            ),
-          ),
-        );
-      },
+      onTap: engine.isAfkWarningActive
+          ? null
+          : () {
+              // Educate the user that ending is a long-press gesture.
+              HapticFeedback.lightImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  duration: const Duration(milliseconds: 1500),
+                  content: const Text(
+                    'Long press to end session early.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            },
+      onLongPress: engine.isAfkWarningActive
+          ? null
+          : () async {
+              // Guard against a double-fire racing the auto-route listener.
+              if (_isNavigating) return;
+              _isNavigating = true;
+              HapticFeedback.heavyImpact();
+              final duration = Duration(
+                seconds: engine.sessionTotalFocusSeconds,
+              );
+              // Await so the DB write completes before navigating.
+              await engine.endSession(TerminationReasons.manualEnd);
+              // State.mounted guards the following State.context use across the await.
+              if (!mounted) return;
+              Navigator.of(context).pushReplacement(
+                ImmersiveRoute(
+                  page: SessionReportPage(
+                    duration: duration,
+                    terminationReason: TerminationReasons.manualEnd,
+                  ),
+                ),
+              );
+            },
       child: Container(
         height: 64,
         decoration: BoxDecoration(
@@ -397,7 +412,8 @@ class _BreakModePageState extends State<BreakModePage>
 
   /// RESUME button. Enabled only when the engine recommends returning to focus
   /// ([canResume]); otherwise it stays a locked "WAITING" state that, when
-  /// tapped, explains the user must wait for physiological clearance.
+  /// tapped, explains the user must wait for physiological clearance. Fully
+  /// disabled while an AFK warning is active — same as the focus controls.
   Widget _buildResumeButton(
     ThemeData theme,
     CognitiveEngineProvider engine,
@@ -406,7 +422,9 @@ class _BreakModePageState extends State<BreakModePage>
   ) {
     final colorScheme = theme.colorScheme;
     return FilledButton.icon(
-      onPressed: canResume
+      onPressed: engine.isAfkWarningActive
+          ? null
+          : canResume
           ? () {
               HapticFeedback.heavyImpact();
               engine.manualTransitionToFocus();

@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_constants.dart';
+
 // Services & providers.
 import 'services/simulator_service.dart';
 import 'services/impact_api_service.dart';
@@ -28,8 +30,9 @@ import 'screens/bootloader_screen.dart';
 /// day of SAFTE dynamics plays out in minutes; it is the *initial default* and
 /// can be changed at runtime from the profile's developer tools. Likewise
 /// [_kSimulationScenario] is the boot storyline, swappable via the same panel.
+/// The virtual clock's tick resolution is *not* configurable here — it uses
+/// the app-wide [tickDurationSeconds] so the engine's math never drifts from it.
 const double _kSpeedMultiplier = 60.0; // 1 real second = 60 virtual seconds.
-const int _kVirtualTickSeconds = 5; // Virtual clock resolution per tick.
 const SimulationScenario _kSimulationScenario = SimulationScenario.steadyFocus;
 
 /// Local database file name.
@@ -101,7 +104,7 @@ class FocusMaxxerApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => GlobalClockProvider(
             speedMultiplier: _kSpeedMultiplier,
-            virtualTickSeconds: _kVirtualTickSeconds,
+            virtualTickSeconds: tickDurationSeconds,
           ),
         ),
 

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import '../app_constants.dart';
+
 /// The single, app-wide source of virtual time that drives the whole engine.
 ///
 /// Layer: provider (time source). It advances a virtual clock faster than the
@@ -40,7 +42,10 @@ class GlobalClockProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// The current virtual time; every consumer reads simulated "now" from here.
   DateTime get currentTime => _currentTime;
 
-  GlobalClockProvider({double speedMultiplier = 1.0, this.virtualTickSeconds = 5})
+  GlobalClockProvider({
+    double speedMultiplier = 1.0,
+    this.virtualTickSeconds = tickDurationSeconds,
+  })
       : _speedMultiplier = speedMultiplier {
     WidgetsBinding.instance.addObserver(this);
     _currentTime = DateTime.now();
