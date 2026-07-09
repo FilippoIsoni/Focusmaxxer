@@ -20,10 +20,12 @@ class SegmentTargets {
 /// Layer: pure domain — no Flutter, no state. Given the biological inputs it
 /// always returns the same targets, so it's trivially testable.
 ///
-/// The policy, in short: healthier readiness earns a longer focus block (up to a
-/// ~52/17 "deep work" rhythm); low readiness shrinks it; critically low readiness
-/// is locked to a short recovery segment; and a predictive pass shortens the
-/// block if fatigue is about to cross the warning line mid-session.
+/// The policy, in short: critically low readiness is locked to a short recovery
+/// segment; otherwise the block length is found by a self-consistent forward
+/// search — it walks the projected readiness trajectory minute by minute and ends
+/// the block as soon as the elapsed minutes meet the duration that the readiness
+/// *at that moment* prescribes. So the block grows when readiness rises (up to a
+/// ~52/17 "deep work" rhythm) and shrinks when it declines.
 class SessionRulesEngine {
   // --- Daily cap ---
 
@@ -73,40 +75,41 @@ class SessionRulesEngine {
       );
     }
 
-    // Stage 2 — Base focus length: scale linearly with readiness between the
-    // warning and optimal grades.
-    final int baseFocusMinutes = _lerpClampedRound(
-      currentEffectiveness,
-      inLow: warningSafteThreshold,
-      inHigh: optimalSafteThreshold,
-      outLow: warningSegmentMinutes,
-      outHigh: optimalSegmentMinutes,
-    );
-
-    // Stage 3 — Predictive trim: simulate readiness minute-by-minute over the
-    // planned block; if it would drop to the warning line, cut the block short
-    // (never below the warning-grade minimum) so we stop before the crash.
-    int focusMinutes = baseFocusMinutes;
-    for (int futureMin = 1; futureMin <= baseFocusMinutes; futureMin++) {
+    // Stage 2 — Adaptive length via self-consistent stop: walk the projected
+    // readiness minute-by-minute and end the block at the first minute whose
+    // elapsed time meets the duration that *that* minute's readiness prescribes.
+    // The block naturally grows when readiness rises and shrinks when it falls.
+    // The warning-grade floor and optimal cap emerge from the output range of
+    // [_prescribedFocusMinutes], so no explicit clamp is needed here:
+    //  - prescribed ≥ warningSegmentMinutes ⇒ the crossing can't occur before it;
+    //  - prescribed ≤ optimalSegmentMinutes ⇒ the crossing always occurs by then,
+    //    which also bounds the loop.
+    // The crossing minute is taken as-is (a ≤1-minute overshoot vs. the last
+    // sub-threshold minute) to keep the rule simple.
+    int focusMinutes = optimalSegmentMinutes; // If readiness stays optimal.
+    for (int futureMin = 1; futureMin <= optimalSegmentMinutes; futureMin++) {
       final projectedState = SafteEngine.computeStateAt(
         reservoirAtWakeup: baselineReservoir,
         wakeupTime: wakeupTime,
         targetTime: internalClock.add(Duration(minutes: futureMin)),
       );
-      if (projectedState.effectiveness <= warningSafteThreshold) {
-        focusMinutes = math.max(warningSegmentMinutes, futureMin - 1);
+      final int prescribedMinutes = _prescribedFocusMinutes(
+        projectedState.effectiveness,
+      );
+      if (futureMin >= prescribedMinutes) {
+        focusMinutes = futureMin;
         break;
       }
     }
 
-    // Stage 4 — Clamp to the remaining daily budget (may shorten the block).
+    // Stage 3 — Clamp to the remaining daily budget (may shorten the block).
     final int remainingDailySeconds = dailyMaxSeconds - accumulatedDailySeconds;
     final int targetFocusSeconds = math.min(
       focusMinutes * 60,
       remainingDailySeconds,
     );
 
-    // Stage 5 — Break length: scale linearly with the *actual* focus length, so
+    // Stage 4 — Break length: scale linearly with the *actual* focus length, so
     // a longer effort earns a longer rest.
     final int actualFocusMinutes = targetFocusSeconds ~/ 60;
     final int targetBreakMinutes = _lerpClampedRound(
@@ -120,6 +123,21 @@ class SessionRulesEngine {
     return SegmentTargets(
       focusSeconds: targetFocusSeconds,
       breakSeconds: targetBreakMinutes * 60,
+    );
+  }
+
+  /// Focus duration (minutes) prescribed by a given SAFTE [effectiveness]: scales
+  /// linearly between the warning and optimal grades, so the output is bounded to
+  /// [[warningSegmentMinutes], [optimalSegmentMinutes]]. This is the momentary
+  /// "how long should I focus right now" mapping that Stage 2's search converges
+  /// to a self-consistent stop.
+  static int _prescribedFocusMinutes(double effectiveness) {
+    return _lerpClampedRound(
+      effectiveness,
+      inLow: warningSafteThreshold,
+      inHigh: optimalSafteThreshold,
+      outLow: warningSegmentMinutes,
+      outHigh: optimalSegmentMinutes,
     );
   }
 
