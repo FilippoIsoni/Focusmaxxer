@@ -47,12 +47,12 @@ class SessionRulesEngine {
   static const int optimalSegmentMinutes = 52; // Classic deep-work block.
   static const int optimalBreakMinutes = 17;
   static const int warningSegmentMinutes = 25;
-  static const int warningBreakMinutes = 5;
+  static const int warningBreakMinutes = 10;
 
   /// Forced targets when readiness is below [inhibitedSafteThreshold]: a short
   /// focus attempt followed by a mandatory rest.
   static const int _inhibitedFocusMinutes = 15;
-  static const int _inhibitedBreakMinutes = 5;
+  static const int _inhibitedBreakMinutes = 10;
 
   /// Computes the ideal focus/break targets for the next segment from the
   /// current SAFTE state and how much daily budget is left.
@@ -101,8 +101,10 @@ class SessionRulesEngine {
 
     // Stage 4 — Clamp to the remaining daily budget (may shorten the block).
     final int remainingDailySeconds = dailyMaxSeconds - accumulatedDailySeconds;
-    final int targetFocusSeconds =
-        math.min(focusMinutes * 60, remainingDailySeconds);
+    final int targetFocusSeconds = math.min(
+      focusMinutes * 60,
+      remainingDailySeconds,
+    );
 
     // Stage 5 — Break length: scale linearly with the *actual* focus length, so
     // a longer effort earns a longer rest.

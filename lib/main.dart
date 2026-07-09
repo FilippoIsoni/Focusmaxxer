@@ -45,6 +45,9 @@ const String _kDatabaseName = 'app_database_v3.db';
 /// App entry point: initializes bindings, disk storage, and the database, then
 /// hands them to the widget tree.
 void main() async {
+  // Widget needed to be initialized before calling native code
+  // (e.g., SystemChrome, Floor, SharedPreferences) to allow asyncronous
+  // operations in main.
   WidgetsFlutterBinding.ensureInitialized();
 
   // Lock to portrait — the standard orientation for a focus app.
@@ -55,8 +58,9 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
 
   // Open the Floor relational database before the first frame.
-  final database =
-      await $FloorAppDatabase.databaseBuilder(_kDatabaseName).build();
+  final database = await $FloorAppDatabase
+      .databaseBuilder(_kDatabaseName)
+      .build();
 
   runApp(FocusMaxxerApp(prefs: prefs, database: database));
 }
