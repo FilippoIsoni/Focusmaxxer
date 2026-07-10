@@ -499,15 +499,28 @@ class _RecoveryRing extends StatelessWidget {
           BoxShadow(color: accent.withAlpha(_glowAlpha), blurRadius: _glowBlur),
         ],
       ),
-      child: Text(
-        // Shared formatter keeps the clock identical to every other surface.
-        formatClock(elapsedSeconds),
-        style: theme.textTheme.displayLarge?.copyWith(
-          fontSize: _timerFontSize,
-          fontWeight: FontWeight.w200,
-          color: Colors.white,
-          fontFeatures: const [FontFeature.tabularFigures()],//to keep the text width constant as the numbers change
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'RELAX',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: accent.withAlpha(150),
+              letterSpacing: 3.0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            // Shared formatter keeps the clock identical to every other surface.
+            formatClock(elapsedSeconds),
+            style: theme.textTheme.displayLarge?.copyWith(
+              fontSize: _timerFontSize,
+              fontWeight: FontWeight.w200,
+              color: Colors.white,
+              fontFeatures: const [FontFeature.tabularFigures()],//to keep the text width constant as the numbers change
+            ),
+          ),
+        ],
       ),
     );
   }

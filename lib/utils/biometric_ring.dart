@@ -4,7 +4,8 @@ import '../providers/cognitive_engine_provider.dart';
 /// The ring on the focus screen: its arc fills with the segment progress, and
 /// its color encodes the engine state and the biometric stress index.
 ///
-/// The centre text is static: it never scales, it only reads the current value.
+/// Layer: UI helper. Reads [EngineState] from [CognitiveEngineProvider]; the
+/// centre text is static — it never scales, it only reads the current value.
 class BiometricRing extends StatelessWidget {
   final EngineState state;
   final double progressPercentage;
@@ -92,8 +93,7 @@ class BiometricRing extends StatelessWidget {
       child: TweenAnimationBuilder<double>(
         tween: Tween<double>(end: progressPercentage),
         duration: _fillDuration,
-        builder: (context, percentage, _) {//percentage è il valore medio interpolato 
-        // in un istante
+        builder: (context, percentage, _) {
           return Stack(
             alignment: Alignment.center,
             children: [
