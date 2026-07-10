@@ -13,10 +13,10 @@ import 'focus_mode_page.dart';
 /// Full-screen "neural recovery" surface shown while a session is paused on a
 /// break.
 ///
-/// Layer: UI. Renders a breathing-pacer animation and the running timer, and
-/// lets the user either resume focus (once the engine clears them) or end the
-/// session. It also auto-navigates to the report when the break outstays its
-/// budget or the engine ends the session on its own.
+/// Layer: UI. Renders the recovery ring and the running timer, and lets the
+/// user either resume focus (once the engine clears them) or end the session.
+/// It also auto-navigates to the report when the break outstays its budget or
+/// the engine ends the session on its own.
 ///
 /// Collaborators:
 ///   * [CognitiveEngineProvider] — the state machine it watches (to paint) and
@@ -30,8 +30,7 @@ class BreakModePage extends StatefulWidget {
   State<BreakModePage> createState() => _BreakModePageState();
 }
 
-class _BreakModePageState extends State<BreakModePage>
-    with SingleTickerProviderStateMixin {
+class _BreakModePageState extends State<BreakModePage> {
   // --- Ambient glow (decorative blob behind the content) ---
   // This screen keeps a hand-rolled AnimatedContainer instead of the shared
   // [AmbientGlow] on purpose: the halo color crossfades (tertiary <-> secondary)
@@ -53,18 +52,9 @@ class _BreakModePageState extends State<BreakModePage>
   /// be able to detach the listener safely.
   CognitiveEngineProvider? _engineRef;
 
-  /// Drives the inhale/exhale breathing pacer (one full cycle per reverse-repeat).
-  late AnimationController _breathController;
-
   @override
   void initState() {
     super.initState();
-    // 4s per direction => an 8s inhale+exhale cycle, a calm resting pace.
-    _breathController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-
     // Subscribe after the first frame: reading the provider here (not in
     // initState directly) keeps the listener attached to the resolved instance.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -77,7 +67,6 @@ class _BreakModePageState extends State<BreakModePage>
 
   @override
   void dispose() {
-    _breathController.dispose();
     _engineRef?.removeListener(_checkAutoRoute);
     super.dispose();
   }
@@ -159,8 +148,7 @@ class _BreakModePageState extends State<BreakModePage>
                   _buildStatusHeader(theme, accent, isExtended),
                   Expanded(
                     child: Center(
-                      child: _BreathingGuide(
-                        controller: _breathController,
+                      child: _RecoveryRing(
                         accent: accent,
                         elapsedSeconds: elapsedSeconds,
                       ),
@@ -479,125 +467,48 @@ class _BreakModePageState extends State<BreakModePage>
   }
 }
 
-/// The centered breathing pacer: two concentric rings and the live timer.
-///
-/// The outer ring "breathes" (grows/shrinks, brightens, and casts a soft glow)
-/// in sync with [controller], guiding the user's breath; the inner ring is a
-/// fixed reference. All the pulsing math is documented as named constants below.
-class _BreathingGuide extends StatelessWidget {
-  const _BreathingGuide({
-    required this.controller,
-    required this.accent,
-    required this.elapsedSeconds,
-  });
+/// The centered recovery ring: a single soft-edged circle around the live
+/// timer. Static — no breathing pacer, no layered rings.
+class _RecoveryRing extends StatelessWidget {
+  const _RecoveryRing({required this.accent, required this.elapsedSeconds});
 
-  /// Repeating 0->1->0 animation that paces one inhale/exhale cycle.
-  final AnimationController controller;
-
-  /// Accent color of the breathing ring (matches the current break state).
+  /// Accent color of the ring (matches the current break state).
   final Color accent;
 
   /// Seconds elapsed in the session, shown as the live clock.
   final int elapsedSeconds;
 
-  // --- Breathing ring geometry (logical pixels) ---
-  static const double _restDiameter = 260.0; // Ring size at full exhale.
-  static const double _breathExpansion = 40.0; // Extra size added at full inhale.
-  static const double _innerRingDiameter = 240.0; // Fixed inner reference ring.
-
-  // --- Breathing ring emphasis (all interpolated by the eased "curve" 0->1) ---
-  static const int _borderAlphaRest = 20; // Border opacity at exhale...
-  static const int _borderAlphaGain = 40; // ...plus this at full inhale.
-  static const double _borderWidthRest = 1.0; // Border width at exhale...
-  static const double _borderWidthGain = 2.0; // ...plus this at full inhale.
-  static const int _glowAlphaRest = 5; // Halo opacity at exhale...
-  static const int _glowAlphaGain = 15; // ...plus this at full inhale.
-  static const double _glowBlurRest = 30.0; // Halo blur at exhale...
-  static const double _glowBlurGain = 20.0; // ...plus this at full inhale.
-
+  static const double _diameter = 260.0;
+  static const double _borderWidth = 1.5;
+  static const int _borderAlpha = 35;
+  static const int _glowAlpha = 12;
+  static const double _glowBlur = 30.0;
   static const double _timerFontSize = 64.0;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, child) {
-        // Ease the raw 0..1 controller value into a smooth breath curve.
-        final double curve = Curves.easeInOutSine.transform(controller.value);
-        // Contracting phase => guide the user to exhale, expanding => inhale.
-        final bool isExhaling = controller.status == AnimationStatus.reverse;
-
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            _buildBreathingRing(curve),
-            _buildInnerRing(),
-            _buildCenterLabel(theme, isExhaling),
-          ],
-        );
-      },
-    );
-  }
-
-  /// The animated outer ring: size, border and glow all scale with [curve].
-  Widget _buildBreathingRing(double curve) {
-    final double diameter = _restDiameter + (curve * _breathExpansion);
     return Container(
-      width: diameter,
-      height: diameter,
+      width: _diameter,
+      height: _diameter,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: accent.withAlpha((_borderAlphaRest + curve * _borderAlphaGain).toInt()),
-          width: _borderWidthRest + (curve * _borderWidthGain),
-        ),
+        border: Border.all(color: accent.withAlpha(_borderAlpha), width: _borderWidth),
         boxShadow: [
-          BoxShadow(
-            color: accent.withAlpha((_glowAlphaRest + curve * _glowAlphaGain).toInt()),
-            blurRadius: _glowBlurRest + (curve * _glowBlurGain),
-          ),
+          BoxShadow(color: accent.withAlpha(_glowAlpha), blurRadius: _glowBlur),
         ],
       ),
-    );
-  }
-
-  /// The static inner reference ring.
-  Widget _buildInnerRing() {
-    return Container(
-      width: _innerRingDiameter,
-      height: _innerRingDiameter,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withAlpha(10), width: 1.5),
+      child: Text(
+        // Shared formatter keeps the clock identical to every other surface.
+        formatClock(elapsedSeconds),
+        style: theme.textTheme.displayLarge?.copyWith(
+          fontSize: _timerFontSize,
+          fontWeight: FontWeight.w200,
+          color: Colors.white,
+          fontFeatures: const [FontFeature.tabularFigures()],//to keep the text width constant as the numbers change
+        ),
       ),
-    );
-  }
-
-  /// Center content: the INHALE/EXHALE cue and the live timer.
-  Widget _buildCenterLabel(ThemeData theme, bool isExhaling) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          isExhaling ? 'EXHALE' : 'INHALE',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: accent.withAlpha(150),
-            letterSpacing: 3.0,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          // Shared formatter keeps the clock identical to every other surface.
-          formatClock(elapsedSeconds),
-          style: theme.textTheme.displayLarge?.copyWith(
-            fontSize: _timerFontSize,
-            fontWeight: FontWeight.w200,
-            color: Colors.white,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
     );
   }
 }
