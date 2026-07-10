@@ -48,7 +48,7 @@ class _LoginPageState extends State<LoginPage> {
 
   /// Validates the inputs, runs the login, and routes on the outcome.
   Future<void> _handleLogin() async {
-    FocusScope.of(context).unfocus();
+    FocusScope.of(context).unfocus();//removes keybord and selection of textformfield
     // Ignore empty submissions with a light haptic instead of a network call.
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {

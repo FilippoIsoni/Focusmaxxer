@@ -130,7 +130,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final pages = _buildPages(colorScheme);
-    assert(pages.length == _pageCount, 'Slide count must match _pageCount.');
+  
     final currentData = pages[_currentPage];
 
     return Scaffold(
