@@ -43,6 +43,22 @@ It turns that into a concrete recommendation: *focus now for N minutes, then res
 - **Session history & report** — an HR-timeline chart (`fl_chart`) with focus/recovery band shading, plus a browsable, deletable history.
 - **Compressed virtual clock (60×)** so a full day of fatigue dynamics plays out in minutes — ideal for demos.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/homepage_safte_ring.jpg" width="260" alt="Home dashboard — cognitive readiness" /></td>
+    <td align="center"><img src="assets/screenshots/report.jpg" width="260" alt="Session report — HR timeline" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Dashboard</b> — cognitive readiness &amp; START gate</td>
+    <td align="center"><b>Debrief</b> — deep-work total &amp; HR timeline</td>
+  </tr>
+</table>
+
+**[See the full walkthrough → docs/GALLERY.md](docs/GALLERY.md)** — the whole session
+journey, screen by screen (calibration → deep focus → stress → overload → recovery → report).
+
 ## What's real vs. simulated
 
 A defining fact about the app: its two signals come from different worlds.
