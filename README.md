@@ -45,9 +45,20 @@ It turns that into a concrete recommendation: *focus now for N minutes, then res
 
 ## Screenshots
 
-**[See the full visual walkthrough → GALLERY.md](GALLERY.md)** — every screen in session
-order (sign-in → dashboard → calibration → deep focus → stress → overload → recovery →
-debrief → history), with the focus ring's color-coded states explained.
+<table>
+  <tr>
+    <td align="center"><img src="assets/screenshots/homepage_safte_ring.jpg" width="260" alt="Home dashboard — cognitive readiness" /></td>
+    <td align="center"><img src="assets/screenshots/focus_stressed.jpg" width="260" alt="Focus session — biometric stress ring" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Dashboard</b> — cognitive readiness &amp; START gate</td>
+    <td align="center"><b>Deep focus</b> — the ring drifts amber as stress rises</td>
+  </tr>
+</table>
+
+**[See the full visual walkthrough → docs/GALLERY.md](docs/GALLERY.md)** — every screen in
+session order (sign-in → dashboard → calibration → deep focus → stress → overload → recovery
+→ debrief → history), with the focus ring's color-coded states explained.
 
 ## What's real vs. simulated
 
