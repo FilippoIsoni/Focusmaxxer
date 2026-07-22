@@ -45,19 +45,9 @@ It turns that into a concrete recommendation: *focus now for N minutes, then res
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td align="center"><img src="assets/screenshots/homepage_safte_ring.jpg" width="260" alt="Home dashboard — cognitive readiness" /></td>
-    <td align="center"><img src="assets/screenshots/report.jpg" width="260" alt="Session report — HR timeline" /></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Dashboard</b> — cognitive readiness &amp; START gate</td>
-    <td align="center"><b>Debrief</b> — deep-work total &amp; HR timeline</td>
-  </tr>
-</table>
-
-**[See the full walkthrough → docs/GALLERY.md](docs/GALLERY.md)** — the whole session
-journey, screen by screen (calibration → deep focus → stress → overload → recovery → report).
+**[See the full visual walkthrough → GALLERY.md](GALLERY.md)** — every screen in session
+order (sign-in → dashboard → calibration → deep focus → stress → overload → recovery →
+debrief → history), with the focus ring's color-coded states explained.
 
 ## What's real vs. simulated
 
