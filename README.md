@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/focusmaxxer_logo_v3.png" alt="FocusMaxxer logo" width="140" />
+<img src="assets/focusmaxxer_ic_foreground_10e.png" alt="FocusMaxxer logo" width="140" />
 
 # FocusMaxxer
 
