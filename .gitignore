@@ -53,3 +53,4 @@ app.*.map.json
 
 # Local orientation file: kept out of the repo (must never land on main).
 CLAUDE.md
+AGENTS.md
